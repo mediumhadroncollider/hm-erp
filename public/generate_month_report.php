@@ -5,6 +5,8 @@ declare(strict_types=1);
 date_default_timezone_set('Europe/Warsaw');
 
 require __DIR__ . '/../bin/_common.php';
+require __DIR__ . '/../bin/_virtualo.php';
+require __DIR__ . '/../bin/_empik.php';
 require __DIR__ . '/_web_common.php';
 
 try {
@@ -92,7 +94,6 @@ try {
             'tmp_path' => $tmpPath,
             'orig_name' => $origName,
             'extension' => $fileExt,
-            'used' => false,
         ];
     }
 
@@ -103,6 +104,83 @@ try {
         ]);
     }
 
+    $classifiedReports = [];
+    $classificationErrors = [];
+    foreach ($requiredReports as $reportDef) {
+        $fieldName = (string)($reportDef['field_name'] ?? '');
+        $label = (string)($reportDef['label'] ?? $fieldName);
+        $detector = (string)($reportDef['detector'] ?? '');
+        $allowedExtensions = array_map(
+            static fn($v): string => strtolower((string)$v),
+            is_array($reportDef['allowed_extensions'] ?? null) ? $reportDef['allowed_extensions'] : []
+        );
+
+        if ($fieldName === '' || $detector === '' || !function_exists($detector)) {
+            throw new RuntimeException('Niepoprawna konfiguracja requiredReportsDefinitions() dla: ' . $label);
+        }
+
+        $candidates = [];
+        foreach ($uploadedFiles as $candidate) {
+            $ext = (string)($candidate['extension'] ?? '');
+            if ($allowedExtensions !== [] && !in_array($ext, $allowedExtensions, true)) {
+                continue;
+            }
+
+            $detectionResult = $detector((string)$candidate['tmp_path'], (string)$candidate['orig_name']);
+            if (($detectionResult['ok'] ?? false) === true) {
+                $candidates[] = [
+                    'file' => $candidate,
+                    'result' => $detectionResult,
+                ];
+            } else {
+                $classificationErrors[] = [
+                    'label' => $label,
+                    'file' => (string)$candidate['orig_name'],
+                    'message' => (string)($detectionResult['message'] ?? 'Nierozpoznany CSV.'),
+                    'details' => is_array($detectionResult['details'] ?? null) ? $detectionResult['details'] : [],
+                ];
+            }
+        }
+
+        if ($candidates === []) {
+            $details = ['Nie znaleziono poprawnego raportu: ' . $label . '.'];
+            foreach ($classificationErrors as $error) {
+                if (($error['label'] ?? '') !== $label) {
+                    continue;
+                }
+                $line = 'Plik ' . $error['file'] . ': ' . $error['message'];
+                if (($error['details'] ?? []) !== []) {
+                    $line .= ' (' . implode(' | ', $error['details']) . ')';
+                }
+                $details[] = $line;
+            }
+
+            jsonResponse(400, [
+                'ok' => false,
+                'message' => 'Brakuje wymaganego raportu: ' . $label . '.',
+                'details' => $details,
+            ]);
+        }
+
+        if (count($candidates) > 1) {
+            $matchedNames = array_map(
+                static fn(array $c): string => (string)($c['file']['orig_name'] ?? ''),
+                $candidates
+            );
+
+            jsonResponse(400, [
+                'ok' => false,
+                'message' => 'Wykryto więcej niż jeden pasujący raport: ' . $label . '.',
+                'details' => [
+                    'Usuń duplikaty i zostaw tylko jeden plik dla źródła ' . $label . '.',
+                    'Pasujące pliki: ' . implode(', ', $matchedNames),
+                ],
+            ]);
+        }
+
+        $classifiedReports[$fieldName] = $candidates[0]['file'];
+    }
+
     $destDir = rtrim((string)$paths['periods_dir'], DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $month . DIRECTORY_SEPARATOR . 'uploads';
     ensureDir($destDir);
 
@@ -110,33 +188,11 @@ try {
     foreach ($requiredReports as $reportDef) {
         $fieldName = (string)($reportDef['field_name'] ?? '');
         $label = (string)($reportDef['label'] ?? $fieldName);
-        $allowedExtensions = array_map(
-            static fn($v): string => strtolower((string)$v),
-            is_array($reportDef['allowed_extensions'] ?? null) ? $reportDef['allowed_extensions'] : []
-        );
-
-        $matchIndex = null;
-        foreach ($uploadedFiles as $i => $candidate) {
-            if (($candidate['used'] ?? false) === true) {
-                continue;
-            }
-
-            $ext = (string)($candidate['extension'] ?? '');
-            if ($allowedExtensions === [] || in_array($ext, $allowedExtensions, true)) {
-                $matchIndex = $i;
-                break;
-            }
+        $matched = $classifiedReports[$fieldName] ?? null;
+        if (!is_array($matched)) {
+            throw new RuntimeException('Brak skalsyfikowanego pliku dla: ' . $label);
         }
 
-        if ($matchIndex === null) {
-            jsonResponse(400, [
-                'ok' => false,
-                'message' => 'Brakuje wymaganego pliku: ' . $label . '.',
-                'details' => ['Dozwolone rozszerzenia: ' . implode(', ', $allowedExtensions)],
-            ]);
-        }
-
-        $matched = $uploadedFiles[$matchIndex];
         $origName = (string)$matched['orig_name'];
         $tmpPath = (string)$matched['tmp_path'];
 
@@ -148,12 +204,11 @@ try {
             ]);
         }
 
-        $uploadedFiles[$matchIndex]['used'] = true;
-
         $uploadedReportPaths[$fieldName] = [
             'path' => $destPath,
             'name' => $origName,
             'label' => $label,
+            'ingest_script' => (string)($reportDef['ingest_script'] ?? ''),
         ];
     }
 
@@ -177,6 +232,14 @@ try {
                 . ' --month=' . escapeshellarg($month)
                 . ' --input=' . escapeshellarg((string)$uploadedReportPaths['virtualo_report']['path'])
                 . ' --original-name=' . escapeshellarg((string)$uploadedReportPaths['virtualo_report']['name']),
+        ],
+        [
+            'label' => 'Walidacja i parsowanie raportu Empik',
+            'cmd' => escapeshellarg($phpCli)
+                . ' ' . escapeshellarg($root . '/bin/ingest_empik_report_month.php')
+                . ' --month=' . escapeshellarg($month)
+                . ' --input=' . escapeshellarg((string)$uploadedReportPaths['empik_report']['path'])
+                . ' --original-name=' . escapeshellarg((string)$uploadedReportPaths['empik_report']['name']),
         ],
         [
             'label' => 'Budowa pliku XLSX',

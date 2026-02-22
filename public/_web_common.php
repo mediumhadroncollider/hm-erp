@@ -28,6 +28,16 @@ function requiredReportsDefinitions(): array
             'field_name' => 'virtualo_report',
             'label' => 'Raport sprzedaży Virtualo',
             'allowed_extensions' => ['csv'],
+            'detector' => 'validateAndParseVirtualoCsv',
+            'ingest_script' => 'ingest_virtualo_report_month.php',
+        ],
+        [
+            'source_id' => 'empik',
+            'field_name' => 'empik_report',
+            'label' => 'Raport sprzedaży Empik',
+            'allowed_extensions' => ['csv'],
+            'detector' => 'validateAndParseEmpikCsv',
+            'ingest_script' => 'ingest_empik_report_month.php',
         ],
     ];
 }

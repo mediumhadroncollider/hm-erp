@@ -54,7 +54,7 @@ function indexReportRowsByIsbn(array $reportRows): array
     return $indexed;
 }
 
-function indexVirtualoByIsbn(array $records): array
+function indexExternalSourceByIsbn(array $records): array
 {
     $out = [];
     foreach ($records as $row) {
@@ -145,7 +145,7 @@ function cloneDataRowStyleIfNeeded(Worksheet $sheet, int $targetLastRow): void
 function clearDataArea(Worksheet $sheet, int $fromRow, int $toRow): void
 {
     for ($r = $fromRow; $r <= $toRow; $r++) {
-        foreach (range('A', 'O') as $col) {
+        foreach (range('A', 'R') as $col) {
             $sheet->setCellValue("{$col}{$r}", null);
         }
     }
@@ -172,21 +172,26 @@ try {
     $monthRootDir = rtrim($periodsDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $month;
     $monthDir = $monthRootDir . DIRECTORY_SEPARATOR . 'woo';
     $virtualoDir = $monthRootDir . DIRECTORY_SEPARATOR . 'virtualo';
+    $empikDir = $monthRootDir . DIRECTORY_SEPARATOR . 'empik';
     ensureDir($monthDir);
 
     $reportJsonPath = $monthDir . DIRECTORY_SEPARATOR . 'report_rows.zero_filled.json';
     $virtualoJsonPath = $virtualoDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
-    if (!is_file($reportJsonPath) || !is_file($virtualoJsonPath)) {
-        throw new RuntimeException('Brak danych wejściowych Woo i/lub Virtualo.');
+    $empikJsonPath = $empikDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
+    if (!is_file($reportJsonPath) || !is_file($virtualoJsonPath) || !is_file($empikJsonPath)) {
+        throw new RuntimeException('Brak danych wejściowych Woo i/lub Virtualo i/lub Empik.');
     }
 
     $reportPayload = readJsonFile($reportJsonPath);
     $virtualoPayload = readJsonFile($virtualoJsonPath);
+    $empikPayload = readJsonFile($empikJsonPath);
     $reportRows = is_array($reportPayload['records'] ?? null) ? $reportPayload['records'] : [];
     $virtualoRows = is_array($virtualoPayload['records'] ?? null) ? $virtualoPayload['records'] : [];
+    $empikRows = is_array($empikPayload['records'] ?? null) ? $empikPayload['records'] : [];
 
     $rowsByIsbn = indexReportRowsByIsbn($reportRows);
-    $virtualoByIsbn = indexVirtualoByIsbn($virtualoRows);
+    $virtualoByIsbn = indexExternalSourceByIsbn($virtualoRows);
+    $empikByIsbn = indexExternalSourceByIsbn($empikRows);
 
     $spreadsheet = IOFactory::load($templatePath);
     while ($spreadsheet->getSheetCount() > 1) {
@@ -197,8 +202,8 @@ try {
     $sheet->setTitle('autozliczanie (' . $month . ')');
 
     $highestColIndex = Coordinate::columnIndexFromString($sheet->getHighestColumn());
-    if ($highestColIndex > 15) {
-        $sheet->removeColumn('P', $highestColIndex - 15);
+    if ($highestColIndex > 18) {
+        $sheet->removeColumn('S', $highestColIndex - 18);
     }
 
     $templateOrder = readTemplateIsbnOrder($sheet);
@@ -213,6 +218,7 @@ try {
     $sheet->setCellValue('H1', 'Histmag (szacunkowy)');
     $sheet->setCellValue('K1', 'sieci zewnętrzne (suma)');
     $sheet->setCellValue('N1', 'Virtualo');
+    $sheet->setCellValue('Q1', 'Empik');
     $sheet->setCellValue('H2', 'kwoty są szacunkowe');
 
     $r = 4;
@@ -222,6 +228,10 @@ try {
     $sumHistNet = 0.0;
     $sumVirtUnits = 0;
     $sumVirtNet = 0.0;
+    $sumEmpikUnits = 0;
+    $sumEmpikNet = 0.0;
+    $sumNetworkUnits = 0;
+    $sumNetworkNet = 0.0;
 
     foreach ($finalRows as $row) {
         $isbnNorm = normalizeIsbnForKey($row['isbn_norm'] ?? null);
@@ -237,15 +247,16 @@ try {
         $virtUnits = (int)$virtualo['units_sold'];
         $virtNet = ((int)$virtualo['margin_net_cents']) / 100;
 
-        // Wariant A: K:L to suma zewnętrznych sieci dystrybucji (na tym etapie tylko Virtualo).
-        // N:O pozostają sekcją szczegółową dla Virtualo, więc wartości są świadomie spójne/dublowane.
-        $externalNetworkUnits = $virtUnits;
-        $externalNetworkNet = $virtNet;
+        $empik = $empikByIsbn[$isbnNorm] ?? ['units_sold' => 0, 'margin_net_cents' => 0];
+        $empikUnits = (int)$empik['units_sold'];
+        $empikNet = ((int)$empik['margin_net_cents']) / 100;
+
+        $externalNetworkUnits = $virtUnits + $empikUnits;
+        $externalNetworkNet = $virtNet + $empikNet;
 
         $sheet->setCellValueExplicit("A{$r}", $isbnNorm, DataType::TYPE_STRING);
         $sheet->setCellValueExplicit("B{$r}", $title, DataType::TYPE_STRING);
 
-        // E:F = łącznie Histmag + suma sieci zewnętrznych.
         $sheet->setCellValue("E{$r}", $histUnits + $externalNetworkUnits);
         $sheet->setCellValue("F{$r}", $histNet + $externalNetworkNet);
 
@@ -258,10 +269,17 @@ try {
         $sheet->setCellValue("N{$r}", $virtUnits);
         $sheet->setCellValue("O{$r}", $virtNet);
 
+        $sheet->setCellValue("Q{$r}", $empikUnits);
+        $sheet->setCellValue("R{$r}", $empikNet);
+
         $sumHistUnits += $histUnits;
         $sumHistNet += $histNet;
         $sumVirtUnits += $virtUnits;
         $sumVirtNet += $virtNet;
+        $sumEmpikUnits += $empikUnits;
+        $sumEmpikNet += $empikNet;
+        $sumNetworkUnits += $externalNetworkUnits;
+        $sumNetworkNet += $externalNetworkNet;
         $totalUnits += ($histUnits + $externalNetworkUnits);
         $totalNet += ($histNet + $externalNetworkNet);
 
@@ -274,11 +292,12 @@ try {
     $sheet->setCellValue("F{$summaryRow}", $totalNet);
     $sheet->setCellValue("H{$summaryRow}", $sumHistUnits);
     $sheet->setCellValue("I{$summaryRow}", $sumHistNet);
-    $sheet->setCellValue("K{$summaryRow}", $sumVirtUnits);
-    $sheet->setCellValue("L{$summaryRow}", $sumVirtNet);
+    $sheet->setCellValue("K{$summaryRow}", $sumNetworkUnits);
+    $sheet->setCellValue("L{$summaryRow}", $sumNetworkNet);
     $sheet->setCellValue("N{$summaryRow}", $sumVirtUnits);
     $sheet->setCellValue("O{$summaryRow}", $sumVirtNet);
-
+    $sheet->setCellValue("Q{$summaryRow}", $sumEmpikUnits);
+    $sheet->setCellValue("R{$summaryRow}", $sumEmpikNet);
     $xlsxPath = $monthDir . DIRECTORY_SEPARATOR . 'raport_sprzedazy_' . $month . '.xlsx';
     IOFactory::createWriter($spreadsheet, 'Xlsx')->save($xlsxPath);
 
@@ -289,14 +308,17 @@ try {
         'template_xlsx' => $templatePath,
         'input_report_json' => $reportJsonPath,
         'input_virtualo_json' => $virtualoJsonPath,
+        'input_empik_json' => $empikJsonPath,
         'output_xlsx' => $xlsxPath,
-        'columns_kept' => 'A:O',
+        'columns_kept' => 'A:R',
         'formulas_in_output' => false,
         'stats' => [
             'rows_written' => count($finalRows),
             'summary_row' => $summaryRow,
             'total_units' => $totalUnits,
             'total_net' => round($totalNet, 2),
+            'network_units' => $sumNetworkUnits,
+            'network_net' => round($sumNetworkNet, 2),
         ],
     ]);
 
