@@ -55,6 +55,14 @@ function requiredReportsDefinitions(): array
             'detector' => 'validateAndParseLegimiXlsx',
             'ingest_script' => 'ingest_legimi_report_month.php',
         ],
+        [
+            'source_id' => 'nexto',
+            'field_name' => 'nexto_report',
+            'label' => 'Raport Nexto',
+            'allowed_extensions' => ['xlsx'],
+            'detector' => 'validateAndParseNextoXlsx',
+            'ingest_script' => 'ingest_nexto_report_month.php',
+        ],
     ];
 }
 

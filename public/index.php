@@ -177,6 +177,7 @@ $requiredReports = requiredReportsDefinitions();
         'Parsowanie raportu Empik…',
         'Parsowanie raportu Publio…',
         'Parsowanie raportu Legimi…',
+        'Parsowanie raportu Nexto…',
         'Budowa raportu i przygotowanie pliku xlsx…'
       ];
 
@@ -346,7 +347,7 @@ $requiredReports = requiredReportsDefinitions();
       async function analyzeFile(file) {
         const ext = getFileExtension(file.name);
         if (ext === 'xlsx') {
-          return { kind: 'legimi', message: '⏳ Wstępnie dopasowano jako Legimi (.xlsx), backend potwierdzi' };
+          return { kind: 'xlsx_shared', message: '⏳ Typ raportu XLSX zostanie potwierdzony przez backend (Legimi/Nexto)' };
         }
         if (ext !== 'csv') {
           return { kind: 'unsupported', message: '⚠️ nierozpoznany typ pliku', ext };
@@ -357,6 +358,19 @@ $requiredReports = requiredReportsDefinitions();
         } catch (e) {
           return { kind: 'unknown', message: '⚠️ CSV nierozpoznany (błąd odczytu nagłówka).' };
         }
+      }
+
+
+      function isXlsxSharedSource(sourceId) {
+        return sourceId === 'legimi' || sourceId === 'nexto';
+      }
+
+      function matchReportForUi(report, analyzed) {
+        if (isXlsxSharedSource(report.source_id)) {
+          return analyzed.find(({ analysis, file }) => analysis.kind === 'xlsx_shared' && getFileExtension(file.name) === 'xlsx');
+        }
+
+        return analyzed.find(({ analysis }) => analysis.kind === report.source_id);
       }
 
       async function updateUiForFile() {
@@ -397,16 +411,21 @@ $requiredReports = requiredReportsDefinitions();
 
         let allRequiredMatched = true;
         requiredReports.forEach((report) => {
-          const matched = analyzed.find(({ analysis }) => analysis.kind === report.source_id);
+          const matched = matchReportForUi(report, analyzed);
           const statusLi = document.createElement('li');
 
           if (matched) {
-            statusLi.className = 'text-emerald-700';
-            statusLi.textContent = `✅ ${report.label}: ${matched.file.name}`;
+            if (isXlsxSharedSource(report.source_id)) {
+              statusLi.className = 'text-amber-700';
+              statusLi.textContent = `⏳ ${report.label}: ${matched.file.name} (potwierdzi backend po zawartości XLSX)`;
+            } else {
+              statusLi.className = 'text-emerald-700';
+              statusLi.textContent = `✅ ${report.label}: ${matched.file.name}`;
+            }
           } else {
             allRequiredMatched = false;
             statusLi.className = 'text-red-700';
-            statusLi.textContent = `❌ ${report.label}: brak pliku rozpoznanego po nagłówkach`;
+            statusLi.textContent = `❌ ${report.label}: brak pliku rozpoznanego po nagłówkach/typie`;
           }
 
           requiredStatusList.appendChild(statusLi);
@@ -421,11 +440,12 @@ $requiredReports = requiredReportsDefinitions();
         }
 
         const hasUncertainCsv = analyzed.some(({ analysis }) => analysis.kind === 'unknown' || analysis.kind === 'ambiguous');
+        const hasSharedXlsx = analyzed.some(({ analysis }) => analysis.kind === 'xlsx_shared');
 
-        if (allRequiredMatched) {
+        if (allRequiredMatched && !hasSharedXlsx) {
           validationStatus.textContent = 'Status walidacji: komplet wstępnie rozpoznany po nagłówkach / typie pliku. Backend pozostaje źródłem prawdy.';
           validationStatus.className = 'mt-3 text-sm font-medium text-emerald-700';
-        } else if (hasUncertainCsv) {
+        } else if (hasUncertainCsv || hasSharedXlsx) {
           validationStatus.textContent = 'Status walidacji: wstępne rozpoznanie po nagłówkach jest niepełne/niejednoznaczne; pełna klasyfikacja nastąpi po stronie backendu.';
           validationStatus.className = 'mt-3 text-sm font-medium text-amber-700';
         } else {

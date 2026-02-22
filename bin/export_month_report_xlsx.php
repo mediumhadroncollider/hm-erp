@@ -11,7 +11,7 @@ use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-const REPORT_LAST_COLUMN = 'X';
+const REPORT_LAST_COLUMN = 'AB';
 
 function normalizeIsbnForKey($value): ?string
 {
@@ -179,6 +179,7 @@ try {
     $empikDir = $monthRootDir . DIRECTORY_SEPARATOR . 'empik';
     $publioDir = $monthRootDir . DIRECTORY_SEPARATOR . 'publio';
     $legimiDir = $monthRootDir . DIRECTORY_SEPARATOR . 'legimi';
+    $nextoDir = $monthRootDir . DIRECTORY_SEPARATOR . 'nexto';
     ensureDir($monthDir);
 
     $reportJsonPath = $monthDir . DIRECTORY_SEPARATOR . 'report_rows.zero_filled.json';
@@ -186,8 +187,9 @@ try {
     $empikJsonPath = $empikDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
     $publioJsonPath = $publioDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
     $legimiJsonPath = $legimiDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
-    if (!is_file($reportJsonPath) || !is_file($virtualoJsonPath) || !is_file($empikJsonPath) || !is_file($publioJsonPath) || !is_file($legimiJsonPath)) {
-        throw new RuntimeException('Brak danych wejściowych Woo i/lub Virtualo i/lub Empik i/lub Publio i/lub Legimi.');
+    $nextoJsonPath = $nextoDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
+    if (!is_file($reportJsonPath) || !is_file($virtualoJsonPath) || !is_file($empikJsonPath) || !is_file($publioJsonPath) || !is_file($legimiJsonPath) || !is_file($nextoJsonPath)) {
+        throw new RuntimeException('Brak danych wejściowych Woo i/lub Virtualo i/lub Empik i/lub Publio i/lub Legimi i/lub Nexto.');
     }
 
     $reportPayload = readJsonFile($reportJsonPath);
@@ -195,17 +197,20 @@ try {
     $empikPayload = readJsonFile($empikJsonPath);
     $publioPayload = readJsonFile($publioJsonPath);
     $legimiPayload = readJsonFile($legimiJsonPath);
+    $nextoPayload = readJsonFile($nextoJsonPath);
     $reportRows = is_array($reportPayload['records'] ?? null) ? $reportPayload['records'] : [];
     $virtualoRows = is_array($virtualoPayload['records'] ?? null) ? $virtualoPayload['records'] : [];
     $empikRows = is_array($empikPayload['records'] ?? null) ? $empikPayload['records'] : [];
     $publioRows = is_array($publioPayload['records'] ?? null) ? $publioPayload['records'] : [];
     $legimiRows = is_array($legimiPayload['records'] ?? null) ? $legimiPayload['records'] : [];
+    $nextoRows = is_array($nextoPayload['records'] ?? null) ? $nextoPayload['records'] : [];
 
     $rowsByIsbn = indexReportRowsByIsbn($reportRows);
     $virtualoByIsbn = indexExternalSourceByIsbn($virtualoRows);
     $empikByIsbn = indexExternalSourceByIsbn($empikRows);
     $publioByIsbn = indexExternalSourceByIsbn($publioRows);
     $legimiByIsbn = indexExternalSourceByIsbn($legimiRows);
+    $nextoByIsbn = indexExternalSourceByIsbn($nextoRows);
 
     $spreadsheet = IOFactory::load($templatePath);
     while ($spreadsheet->getSheetCount() > 1) {
@@ -237,6 +242,7 @@ try {
     $sheet->setCellValue('Q1', 'Empik');
     $sheet->setCellValue('T1', 'Publio');
     $sheet->setCellValue('W1', 'Legimi');
+    $sheet->setCellValue('Z1', 'Nexto');
     $sheet->setCellValue('H2', 'kwoty są szacunkowe');
 
     $r = 4;
@@ -254,6 +260,8 @@ try {
     $sumPublioNet = 0.0;
     $sumLegimiUnits = 0;
     $sumLegimiNet = 0.0;
+    $sumNextoUnits = 0;
+    $sumNextoNet = 0.0;
 
     foreach ($finalRows as $row) {
         $isbnNorm = normalizeIsbnForKey($row['isbn_norm'] ?? null);
@@ -281,8 +289,12 @@ try {
         $legimiUnits = (int)$legimi['units_sold'];
         $legimiNet = ((int)$legimi['margin_net_cents']) / 100;
 
-        $externalNetworkUnits = $virtUnits + $empikUnits + $publioUnits + $legimiUnits;
-        $externalNetworkNet = $virtNet + $empikNet + $publioNet + $legimiNet;
+        $nexto = $nextoByIsbn[$isbnNorm] ?? ['units_sold' => 0, 'margin_net_cents' => 0];
+        $nextoUnits = (int)$nexto['units_sold'];
+        $nextoNet = ((int)$nexto['margin_net_cents']) / 100;
+
+        $externalNetworkUnits = $virtUnits + $empikUnits + $publioUnits + $legimiUnits + $nextoUnits;
+        $externalNetworkNet = $virtNet + $empikNet + $publioNet + $legimiNet + $nextoNet;
 
         $sheet->setCellValueExplicit("A{$r}", $isbnNorm, DataType::TYPE_STRING);
         $sheet->setCellValueExplicit("B{$r}", $title, DataType::TYPE_STRING);
@@ -308,6 +320,9 @@ try {
         $sheet->setCellValue("W{$r}", $legimiUnits);
         $sheet->setCellValue("X{$r}", $legimiNet);
 
+        $sheet->setCellValue("Z{$r}", $nextoUnits);
+        $sheet->setCellValue("AA{$r}", $nextoNet);
+
         $sumHistUnits += $histUnits;
         $sumHistNet += $histNet;
         $sumVirtUnits += $virtUnits;
@@ -320,6 +335,8 @@ try {
         $sumPublioNet += $publioNet;
         $sumLegimiUnits += $legimiUnits;
         $sumLegimiNet += $legimiNet;
+        $sumNextoUnits += $nextoUnits;
+        $sumNextoNet += $nextoNet;
         $totalUnits += ($histUnits + $externalNetworkUnits);
         $totalNet += ($histNet + $externalNetworkNet);
 
@@ -342,6 +359,8 @@ try {
     $sheet->setCellValue("U{$summaryRow}", $sumPublioNet);
     $sheet->setCellValue("W{$summaryRow}", $sumLegimiUnits);
     $sheet->setCellValue("X{$summaryRow}", $sumLegimiNet);
+    $sheet->setCellValue("Z{$summaryRow}", $sumNextoUnits);
+    $sheet->setCellValue("AA{$summaryRow}", $sumNextoNet);
     $xlsxPath = $monthDir . DIRECTORY_SEPARATOR . 'raport_sprzedazy_' . $month . '.xlsx';
     IOFactory::createWriter($spreadsheet, 'Xlsx')->save($xlsxPath);
 
@@ -355,6 +374,7 @@ try {
         'input_empik_json' => $empikJsonPath,
         'input_publio_json' => $publioJsonPath,
         'input_legimi_json' => $legimiJsonPath,
+        'input_nexto_json' => $nextoJsonPath,
         'output_xlsx' => $xlsxPath,
         'columns_kept' => 'A:' . REPORT_LAST_COLUMN,
         'formulas_in_output' => false,
