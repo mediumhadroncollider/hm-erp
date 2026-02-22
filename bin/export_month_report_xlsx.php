@@ -145,7 +145,7 @@ function cloneDataRowStyleIfNeeded(Worksheet $sheet, int $targetLastRow): void
 function clearDataArea(Worksheet $sheet, int $fromRow, int $toRow): void
 {
     for ($r = $fromRow; $r <= $toRow; $r++) {
-        foreach (range('A', 'O') as $col) {
+        foreach (range('A', 'R') as $col) {
             $sheet->setCellValue("{$col}{$r}", null);
         }
     }
@@ -202,8 +202,8 @@ try {
     $sheet->setTitle('autozliczanie (' . $month . ')');
 
     $highestColIndex = Coordinate::columnIndexFromString($sheet->getHighestColumn());
-    if ($highestColIndex > 15) {
-        $sheet->removeColumn('P', $highestColIndex - 15);
+    if ($highestColIndex > 18) {
+        $sheet->removeColumn('S', $highestColIndex - 18);
     }
 
     $templateOrder = readTemplateIsbnOrder($sheet);
@@ -218,6 +218,7 @@ try {
     $sheet->setCellValue('H1', 'Histmag (szacunkowy)');
     $sheet->setCellValue('K1', 'sieci zewnętrzne (suma)');
     $sheet->setCellValue('N1', 'Virtualo');
+    $sheet->setCellValue('Q1', 'Empik');
     $sheet->setCellValue('H2', 'kwoty są szacunkowe');
 
     $r = 4;
@@ -268,6 +269,9 @@ try {
         $sheet->setCellValue("N{$r}", $virtUnits);
         $sheet->setCellValue("O{$r}", $virtNet);
 
+        $sheet->setCellValue("Q{$r}", $empikUnits);
+        $sheet->setCellValue("R{$r}", $empikNet);
+
         $sumHistUnits += $histUnits;
         $sumHistNet += $histNet;
         $sumVirtUnits += $virtUnits;
@@ -292,6 +296,8 @@ try {
     $sheet->setCellValue("L{$summaryRow}", $sumNetworkNet);
     $sheet->setCellValue("N{$summaryRow}", $sumVirtUnits);
     $sheet->setCellValue("O{$summaryRow}", $sumVirtNet);
+    $sheet->setCellValue("Q{$summaryRow}", $sumEmpikUnits);
+    $sheet->setCellValue("R{$summaryRow}", $sumEmpikNet);
     $xlsxPath = $monthDir . DIRECTORY_SEPARATOR . 'raport_sprzedazy_' . $month . '.xlsx';
     IOFactory::createWriter($spreadsheet, 'Xlsx')->save($xlsxPath);
 
@@ -304,7 +310,7 @@ try {
         'input_virtualo_json' => $virtualoJsonPath,
         'input_empik_json' => $empikJsonPath,
         'output_xlsx' => $xlsxPath,
-        'columns_kept' => 'A:O',
+        'columns_kept' => 'A:R',
         'formulas_in_output' => false,
         'stats' => [
             'rows_written' => count($finalRows),
