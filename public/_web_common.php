@@ -16,12 +16,28 @@ function previousFullMonthKey(string $tz = 'Europe/Warsaw'): string
     return $prevMonth->format('Y-m');
 }
 
+
+/**
+ * @return array<int,array<string,mixed>>
+ */
+function requiredReportsDefinitions(): array
+{
+    return [
+        [
+            'source_id' => 'virtualo',
+            'field_name' => 'virtualo_report',
+            'label' => 'Raport sprzedaży Virtualo',
+            'allowed_extensions' => ['csv'],
+        ],
+    ];
+}
+
 /**
  * Nazwa pliku raportu miesięcznego XLSX (aktualnie Woo-only).
  */
 function monthReportXlsxFilename(string $month): string
 {
-    return 'raport_sprzedazy_woo_' . $month . '.xlsx';
+    return 'raport_sprzedazy_' . $month . '.xlsx';
 }
 
 /**

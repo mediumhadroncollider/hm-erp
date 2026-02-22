@@ -48,6 +48,77 @@ try {
 
     $root = dirname(__DIR__);
 
+    $requiredReports = requiredReportsDefinitions();
+
+    $uploadedReportPaths = [];
+    foreach ($requiredReports as $reportDef) {
+        $fieldName = (string)($reportDef['field_name'] ?? '');
+        $label = (string)($reportDef['label'] ?? $fieldName);
+
+        if ($fieldName === '' || !isset($_FILES[$fieldName])) {
+            jsonResponse(400, [
+                'ok' => false,
+                'message' => 'Brakuje wymaganego pliku: ' . $label . '.',
+            ]);
+        }
+
+        $file = $_FILES[$fieldName];
+        if (!is_array($file)) {
+            jsonResponse(400, [
+                'ok' => false,
+                'message' => 'Niepoprawny upload dla: ' . $label . '.',
+            ]);
+        }
+
+        $errorCode = isset($file['error']) ? (int)$file['error'] : UPLOAD_ERR_NO_FILE;
+        if ($errorCode !== UPLOAD_ERR_OK) {
+            jsonResponse(400, [
+                'ok' => false,
+                'message' => 'Błąd uploadu dla: ' . $label . '.',
+                'details' => ['Kod błędu uploadu: ' . $errorCode],
+            ]);
+        }
+
+        $tmpPath = isset($file['tmp_name']) ? (string)$file['tmp_name'] : '';
+        if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {
+            jsonResponse(400, [
+                'ok' => false,
+                'message' => 'Nie udało się odczytać uploadu dla: ' . $label . '.',
+            ]);
+        }
+
+        $allowedExtensions = array_map(
+            static fn($v): string => strtolower((string)$v),
+            is_array($reportDef['allowed_extensions'] ?? null) ? $reportDef['allowed_extensions'] : []
+        );
+        $origName = basename((string)($file['name'] ?? 'uploaded_file'));
+        $fileExt = strtolower((string)pathinfo($origName, PATHINFO_EXTENSION));
+        if ($allowedExtensions !== [] && !in_array($fileExt, $allowedExtensions, true)) {
+            jsonResponse(400, [
+                'ok' => false,
+                'message' => 'Niepoprawne rozszerzenie pliku dla: ' . $label . '.',
+                'details' => ['Dozwolone: ' . implode(', ', $allowedExtensions), 'Otrzymano: ' . ($fileExt !== '' ? $fileExt : '(brak)')],
+            ]);
+        }
+
+        $destDir = rtrim((string)$paths['periods_dir'], DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $month . DIRECTORY_SEPARATOR . 'uploads';
+        ensureDir($destDir);
+
+        $destPath = $destDir . DIRECTORY_SEPARATOR . $fieldName . '__' . $origName;
+        if (!move_uploaded_file($tmpPath, $destPath)) {
+            jsonResponse(500, [
+                'ok' => false,
+                'message' => 'Nie udało się zapisać uploadu: ' . $label . '.',
+            ]);
+        }
+
+        $uploadedReportPaths[$fieldName] = [
+            'path' => $destPath,
+            'name' => $origName,
+            'label' => $label,
+        ];
+    }
+
     $steps = [
         [
             'label' => 'Pobranie katalogu Woo',
@@ -62,7 +133,15 @@ try {
             'cmd' => escapeshellarg($phpCli) . ' ' . escapeshellarg($root . '/bin/build_month_rows_from_woo.php') . ' --month=' . escapeshellarg($month),
         ],
         [
-            'label' => 'Budowa pliku XLSX (A:I, bez formuł)',
+            'label' => 'Walidacja i parsowanie raportu Virtualo',
+            'cmd' => escapeshellarg($phpCli)
+                . ' ' . escapeshellarg($root . '/bin/ingest_virtualo_report_month.php')
+                . ' --month=' . escapeshellarg($month)
+                . ' --input=' . escapeshellarg((string)$uploadedReportPaths['virtualo_report']['path'])
+                . ' --original-name=' . escapeshellarg((string)$uploadedReportPaths['virtualo_report']['name']),
+        ],
+        [
+            'label' => 'Budowa pliku XLSX',
             'cmd' => escapeshellarg($phpCli) . ' ' . escapeshellarg($root . '/bin/export_month_report_xlsx.php') . ' --month=' . escapeshellarg($month),
         ],
     ];
