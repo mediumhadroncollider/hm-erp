@@ -47,6 +47,14 @@ function requiredReportsDefinitions(): array
             'detector' => 'validateAndParsePublioCsv',
             'ingest_script' => 'ingest_publio_report_month.php',
         ],
+        [
+            'source_id' => 'legimi',
+            'field_name' => 'legimi_report',
+            'label' => 'Raport Legimi',
+            'allowed_extensions' => ['xlsx'],
+            'detector' => 'validateAndParseLegimiXlsx',
+            'ingest_script' => 'ingest_legimi_report_month.php',
+        ],
     ];
 }
 

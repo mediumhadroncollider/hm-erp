@@ -81,10 +81,10 @@ $requiredReports = requiredReportsDefinitions();
             <p class="text-xs text-slate-500 mt-1">lub</p>
             <label class="inline-flex mt-3 items-center rounded-lg border border-slate-300 bg-slate-100 px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-200 cursor-pointer">
               Wybierz pliki
-              <input id="reportsInput" name="report_files[]" type="file" multiple accept=".csv,text/csv" class="hidden">
+              <input id="reportsInput" name="report_files[]" type="file" multiple accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden">
             </label>
           </div>
-          <p class="mt-2 text-xs text-slate-500">Dozwolone: raporty wymagane przez backend (CSV).</p>
+          <p class="mt-2 text-xs text-slate-500">Dozwolone: raporty wymagane przez backend (CSV/XLSX).</p>
         </div>
 
         <div class="rounded-xl border border-slate-200 bg-white p-4">
@@ -176,6 +176,7 @@ $requiredReports = requiredReportsDefinitions();
         'Parsowanie raportu Virtualo…',
         'Parsowanie raportu Empik…',
         'Parsowanie raportu Publio…',
+        'Parsowanie raportu Legimi…',
         'Budowa raportu i przygotowanie pliku xlsx…'
       ];
 
@@ -344,6 +345,9 @@ $requiredReports = requiredReportsDefinitions();
 
       async function analyzeFile(file) {
         const ext = getFileExtension(file.name);
+        if (ext === 'xlsx') {
+          return { kind: 'legimi', message: '⏳ Wstępnie dopasowano jako Legimi (.xlsx), backend potwierdzi' };
+        }
         if (ext !== 'csv') {
           return { kind: 'unsupported', message: '⚠️ nierozpoznany typ pliku', ext };
         }
@@ -408,9 +412,9 @@ $requiredReports = requiredReportsDefinitions();
           requiredStatusList.appendChild(statusLi);
         });
 
-        const hasCsv = files.some((file) => (getFileExtension(file.name) === 'csv'));
-        if (!hasCsv) {
-          validationStatus.textContent = 'Status walidacji: brak sensownego pliku wejściowego (np. .csv).';
+        const hasSupportedFile = files.some((file) => { const ext = getFileExtension(file.name); return ext === 'csv' || ext === 'xlsx'; });
+        if (!hasSupportedFile) {
+          validationStatus.textContent = 'Status walidacji: brak sensownego pliku wejściowego (np. .csv/.xlsx).';
           validationStatus.className = 'mt-3 text-sm font-medium text-red-700';
           btn.disabled = true;
           return;
@@ -419,13 +423,13 @@ $requiredReports = requiredReportsDefinitions();
         const hasUncertainCsv = analyzed.some(({ analysis }) => analysis.kind === 'unknown' || analysis.kind === 'ambiguous');
 
         if (allRequiredMatched) {
-          validationStatus.textContent = 'Status walidacji: komplet wstępnie rozpoznany po nagłówkach CSV. Backend pozostaje źródłem prawdy.';
+          validationStatus.textContent = 'Status walidacji: komplet wstępnie rozpoznany po nagłówkach / typie pliku. Backend pozostaje źródłem prawdy.';
           validationStatus.className = 'mt-3 text-sm font-medium text-emerald-700';
         } else if (hasUncertainCsv) {
           validationStatus.textContent = 'Status walidacji: wstępne rozpoznanie po nagłówkach jest niepełne/niejednoznaczne; pełna klasyfikacja nastąpi po stronie backendu.';
           validationStatus.className = 'mt-3 text-sm font-medium text-amber-700';
         } else {
-          validationStatus.textContent = 'Status walidacji: częściowy komplet po nagłówkach CSV — backend może odrzucić brakujące wymagania.';
+          validationStatus.textContent = 'Status walidacji: częściowy komplet po stronie UI — backend może odrzucić brakujące wymagania.';
           validationStatus.className = 'mt-3 text-sm font-medium text-amber-700';
         }
 
