@@ -271,7 +271,7 @@ try {
     $finalRows = buildFinalRows($templateOrder, $rowsByIsbn, $month);
 
     // Upewnij się, że mamy style dla dodatkowych wierszy
-    $targetLastRow = max(4, 3 + count($finalRows));
+    $targetLastRow = max(4, 4 + count($finalRows));
     cloneDataRowStyleIfNeeded($sheet, $targetLastRow);
 
     // Nagłówki / notki (na wszelki wypadek)
@@ -287,6 +287,8 @@ try {
     // Wpisz wartości statyczne (bez formuł)
     $r = 4;
     $rowsAddedFromPremiere = 0;
+    $totalUnits = 0;
+    $totalAdjNet = 0.0;
     $templateOrderSet = [];
     foreach ($templateOrder as $isbn) {
         $templateOrderSet[$isbn] = true;
@@ -330,8 +332,22 @@ try {
         $sheet->setCellValue("H{$r}", $units);
         $sheet->setCellValue("I{$r}", $adjNet);
 
+        $totalUnits += $units;
+        $totalAdjNet += $adjNet;
+
         $r++;
     }
+
+    // Wiersz sumaryczny na końcu raportu (jak w szablonie: sprzedaż i przychody)
+    $summaryRow = $r;
+    $sheet->setCellValueExplicit("B{$summaryRow}", 'SUMA', DataType::TYPE_STRING);
+    $sheet->setCellValue("C{$summaryRow}", null);
+    $sheet->setCellValue("D{$summaryRow}", null);
+    $sheet->setCellValue("G{$summaryRow}", null);
+    $sheet->setCellValue("E{$summaryRow}", $totalUnits);
+    $sheet->setCellValue("F{$summaryRow}", $totalAdjNet);
+    $sheet->setCellValue("H{$summaryRow}", $totalUnits);
+    $sheet->setCellValue("I{$summaryRow}", $totalAdjNet);
 
     // Zapis pliku
     $xlsxPath = $monthDir . DIRECTORY_SEPARATOR . 'raport_sprzedazy_woo_' . $month . '.xlsx';
@@ -357,6 +373,9 @@ try {
             'rows_written' => count($finalRows),
             'template_rows_detected' => count($templateOrder),
             'rows_added_from_month_premieres' => $rowsAddedFromPremiere,
+            'summary_row' => $summaryRow,
+            'total_units' => $totalUnits,
+            'total_adjusted_net' => round($totalAdjNet, 2),
         ],
     ]);
 
