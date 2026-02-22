@@ -177,22 +177,174 @@ $requiredReports = requiredReportsDefinitions();
         'Budowa raportu i przygotowanie pliku xlsx…'
       ];
 
-      function findMatchingFile(requirement, files) {
-        const allowedExtensions = Array.isArray(requirement.allowed_extensions)
-          ? requirement.allowed_extensions.map((ext) => String(ext).toLowerCase())
-          : [];
+      const FILE_READ_LIMIT_BYTES = 128 * 1024;
+      const reportSignatures = {
+        virtualo: [
+          ['isbn'],
+          ['formaty'],
+          ['typ'],
+          ['l.', 'l'],
+          ['sprzedaz netto'],
+          ['marza netto']
+        ],
+        empik: [
+          ['isbn'],
+          ['format'],
+          ['model rozliczenia'],
+          ['prog rozliczeniowy'],
+          ['ilosc'],
+          ['wynagrodzenie wyd. netto']
+        ]
+      };
 
-        for (const file of files) {
-          const ext = (file.name.split('.').pop() || '').toLowerCase();
-          if (allowedExtensions.length === 0 || allowedExtensions.includes(ext)) {
-            return file;
+      let analysisToken = 0;
+
+      function getFileExtension(fileName) {
+        return (String(fileName).split('.').pop() || '').toLowerCase();
+      }
+
+      function normalizeHeaderValue(value) {
+        return String(value || '')
+          .replace(/^\uFEFF/, '')
+          .replace(/[\r\n\t]+/g, ' ')
+          .trim()
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/\s+/g, ' ');
+      }
+
+      function parseCsvLine(line, separator) {
+        const out = [];
+        let current = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === '"') {
+            const next = line[i + 1];
+            if (inQuotes && next === '"') {
+              current += '"';
+              i++;
+            } else {
+              inQuotes = !inQuotes;
+            }
+            continue;
+          }
+          if (ch === separator && !inQuotes) {
+            out.push(current);
+            current = '';
+            continue;
+          }
+          current += ch;
+        }
+        out.push(current);
+        return out;
+      }
+
+      function detectSeparator(line) {
+        const semicolons = (line.match(/;/g) || []).length;
+        const commas = (line.match(/,/g) || []).length;
+        return semicolons >= commas ? ';' : ',';
+      }
+
+      function findFirstNonEmptyLine(text) {
+        const lines = String(text || '').split(/\r\n|\n|\r/);
+        for (const line of lines) {
+          if (line.trim() !== '') {
+            return line;
+          }
+        }
+        return '';
+      }
+
+      function decodeBuffer(buffer) {
+        const decoders = [];
+        try {
+          decoders.push(new TextDecoder('utf-8', { fatal: true }));
+        } catch (_) {
+          decoders.push(new TextDecoder('utf-8'));
+        }
+        try {
+          decoders.push(new TextDecoder('windows-1250', { fatal: false }));
+        } catch (_) {
+          // browser without windows-1250 support
+        }
+
+        for (const decoder of decoders) {
+          try {
+            return decoder.decode(buffer);
+          } catch (_) {
+            // try next decoder
           }
         }
 
-        return null;
+        return new TextDecoder().decode(buffer);
       }
 
-      function updateUiForFile() {
+      function readFileChunk(file, maxBytes) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          const blob = file.slice(0, maxBytes);
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(reader.error || new Error('Nie udało się odczytać pliku.'));
+          reader.readAsArrayBuffer(blob);
+        });
+      }
+
+      function signatureMatches(headerSet, signature) {
+        return signature.every((alternatives) => alternatives.some((candidate) => headerSet.has(candidate)));
+      }
+
+      async function analyzeCsvFile(file) {
+        const buffer = await readFileChunk(file, FILE_READ_LIMIT_BYTES);
+        const text = decodeBuffer(buffer);
+        const headerLine = findFirstNonEmptyLine(text);
+        if (!headerLine) {
+          return { kind: 'unknown', message: '⚠️ CSV nierozpoznany (pusty nagłówek).' };
+        }
+
+        const separator = detectSeparator(headerLine);
+        const rawHeaders = parseCsvLine(headerLine, separator);
+        const headers = rawHeaders.map(normalizeHeaderValue).filter((h) => h.length > 0);
+        const headerSet = new Set(headers);
+
+        const matches = [];
+        if (signatureMatches(headerSet, reportSignatures.virtualo)) {
+          matches.push('virtualo');
+        }
+        if (signatureMatches(headerSet, reportSignatures.empik)) {
+          matches.push('empik');
+        }
+
+        if (matches.length === 1) {
+          const kind = matches[0];
+          return {
+            kind,
+            message: kind === 'virtualo' ? '✅ rozpoznano jako Virtualo' : '✅ rozpoznano jako Empik'
+          };
+        }
+        if (matches.length > 1) {
+          return { kind: 'ambiguous', message: '⚠️ niejednoznaczny CSV (pasuje do wielu sygnatur).' };
+        }
+
+        return { kind: 'unknown', message: '⚠️ CSV nierozpoznany (pełna walidacja po stronie backendu).' };
+      }
+
+      async function analyzeFile(file) {
+        const ext = getFileExtension(file.name);
+        if (ext !== 'csv') {
+          return { kind: 'unsupported', message: '⚠️ nierozpoznany typ pliku', ext };
+        }
+
+        try {
+          return await analyzeCsvFile(file);
+        } catch (e) {
+          return { kind: 'unknown', message: '⚠️ CSV nierozpoznany (błąd odczytu nagłówka).' };
+        }
+      }
+
+      async function updateUiForFile() {
+        const currentToken = ++analysisToken;
         const files = Array.from(input.files || []);
         fileList.innerHTML = '';
         requiredStatusList.innerHTML = '';
@@ -216,35 +368,35 @@ $requiredReports = requiredReportsDefinitions();
           return;
         }
 
-        files.forEach((file) => {
-          const li = document.createElement('li');
-          const ext = (file.name.split('.').pop() || '').toLowerCase();
-          const recognizedBy = requiredReports
-            .filter((report) => (report.allowed_extensions || []).map((e) => String(e).toLowerCase()).includes(ext))
-            .map((report) => report.label);
+        const analyzed = await Promise.all(files.map(async (file) => ({ file, analysis: await analyzeFile(file) })));
+        if (currentToken !== analysisToken) {
+          return;
+        }
 
-          li.textContent = `${file.name} (${Math.round(file.size / 1024)} KB)${recognizedBy.length ? ` → ${recognizedBy.join(', ')}` : ' → nierozpoznany typ'}`;
+        analyzed.forEach(({ file, analysis }) => {
+          const li = document.createElement('li');
+          li.textContent = `${file.name} (${Math.round(file.size / 1024)} KB) → ${analysis.message}`;
           fileList.appendChild(li);
         });
 
         let allRequiredMatched = true;
         requiredReports.forEach((report) => {
-          const matchedFile = findMatchingFile(report, files);
+          const matched = analyzed.find(({ analysis }) => analysis.kind === report.source_id);
           const statusLi = document.createElement('li');
 
-          if (matchedFile) {
+          if (matched) {
             statusLi.className = 'text-emerald-700';
-            statusLi.textContent = `✅ ${report.label}: ${matchedFile.name}`;
+            statusLi.textContent = `✅ ${report.label}: ${matched.file.name}`;
           } else {
             allRequiredMatched = false;
             statusLi.className = 'text-red-700';
-            statusLi.textContent = `❌ ${report.label}: brak pasującego pliku`;
+            statusLi.textContent = `❌ ${report.label}: brak pliku rozpoznanego po nagłówkach`;
           }
 
           requiredStatusList.appendChild(statusLi);
         });
 
-        const hasCsv = files.some((file) => ((file.name.split('.').pop() || '').toLowerCase() === 'csv'));
+        const hasCsv = files.some((file) => (getFileExtension(file.name) === 'csv'));
         if (!hasCsv) {
           validationStatus.textContent = 'Status walidacji: brak sensownego pliku wejściowego (np. .csv).';
           validationStatus.className = 'mt-3 text-sm font-medium text-red-700';
@@ -252,11 +404,16 @@ $requiredReports = requiredReportsDefinitions();
           return;
         }
 
+        const hasUncertainCsv = analyzed.some(({ analysis }) => analysis.kind === 'unknown' || analysis.kind === 'ambiguous');
+
         if (allRequiredMatched) {
-          validationStatus.textContent = 'Status walidacji: komplet plików wstępnie rozpoznany, backend wykona pełną walidację.';
+          validationStatus.textContent = 'Status walidacji: komplet wstępnie rozpoznany po nagłówkach CSV. Backend pozostaje źródłem prawdy.';
           validationStatus.className = 'mt-3 text-sm font-medium text-emerald-700';
+        } else if (hasUncertainCsv) {
+          validationStatus.textContent = 'Status walidacji: wstępne rozpoznanie po nagłówkach jest niepełne/niejednoznaczne; pełna klasyfikacja nastąpi po stronie backendu.';
+          validationStatus.className = 'mt-3 text-sm font-medium text-amber-700';
         } else {
-          validationStatus.textContent = 'Status walidacji: częściowy komplet — backend może odrzucić brakujące wymagania.';
+          validationStatus.textContent = 'Status walidacji: częściowy komplet po nagłówkach CSV — backend może odrzucić brakujące wymagania.';
           validationStatus.className = 'mt-3 text-sm font-medium text-amber-700';
         }
 

@@ -11,6 +11,8 @@ use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
+const REPORT_LAST_COLUMN = 'R';
+
 function normalizeIsbnForKey($value): ?string
 {
     if ($value === null) {
@@ -134,7 +136,7 @@ function cloneDataRowStyleIfNeeded(Worksheet $sheet, int $targetLastRow): void
     }
 
     for ($r = $highestRow + 1; $r <= $targetLastRow; $r++) {
-        $sheet->duplicateStyle($sheet->getStyle("A{$templateStyleRow}:O{$templateStyleRow}"), "A{$r}:O{$r}");
+        $sheet->duplicateStyle($sheet->getStyle("A{$templateStyleRow}:" . REPORT_LAST_COLUMN . "{$templateStyleRow}"), "A{$r}:" . REPORT_LAST_COLUMN . "{$r}");
         $srcHeight = $sheet->getRowDimension($templateStyleRow)->getRowHeight();
         if ($srcHeight !== null && $srcHeight > 0) {
             $sheet->getRowDimension($r)->setRowHeight($srcHeight);
@@ -144,8 +146,10 @@ function cloneDataRowStyleIfNeeded(Worksheet $sheet, int $targetLastRow): void
 
 function clearDataArea(Worksheet $sheet, int $fromRow, int $toRow): void
 {
+    $lastColIndex = Coordinate::columnIndexFromString(REPORT_LAST_COLUMN);
     for ($r = $fromRow; $r <= $toRow; $r++) {
-        foreach (range('A', 'R') as $col) {
+        for ($colIndex = 1; $colIndex <= $lastColIndex; $colIndex++) {
+            $col = Coordinate::stringFromColumnIndex($colIndex);
             $sheet->setCellValue("{$col}{$r}", null);
         }
     }
@@ -202,8 +206,10 @@ try {
     $sheet->setTitle('autozliczanie (' . $month . ')');
 
     $highestColIndex = Coordinate::columnIndexFromString($sheet->getHighestColumn());
-    if ($highestColIndex > 18) {
-        $sheet->removeColumn('S', $highestColIndex - 18);
+    $lastColIndex = Coordinate::columnIndexFromString(REPORT_LAST_COLUMN);
+    if ($highestColIndex > $lastColIndex) {
+        $firstColumnToRemove = Coordinate::stringFromColumnIndex($lastColIndex + 1);
+        $sheet->removeColumn($firstColumnToRemove, $highestColIndex - $lastColIndex);
     }
 
     $templateOrder = readTemplateIsbnOrder($sheet);
@@ -310,7 +316,7 @@ try {
         'input_virtualo_json' => $virtualoJsonPath,
         'input_empik_json' => $empikJsonPath,
         'output_xlsx' => $xlsxPath,
-        'columns_kept' => 'A:R',
+        'columns_kept' => 'A:' . REPORT_LAST_COLUMN,
         'formulas_in_output' => false,
         'stats' => [
             'rows_written' => count($finalRows),
