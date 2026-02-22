@@ -11,7 +11,7 @@ Aktualny zakres:
 - pobranie zamówień za poprzedni pełny miesiąc,
 - agregacja i zero-fill po ISBN,
 - eksport uproszczonego raportu miesięcznego do XLSX,
-- proste UI z przyciskiem „Generuj” + obowiązkowy upload raportu Virtualo (CSV).
+- proste UI z jednym wspólnym polem uploadu raportów + walidacja wymaganego raportu Virtualo (CSV).
 
 ## Wymagania
 
@@ -60,7 +60,8 @@ UI uruchamia pipeline składający się z kroków CLI:
 1. pobranie katalogu produktów,
 2. pobranie zamówień za miesiąc,
 3. budowa danych raportowych (JSON, zero-fill),
-4. eksport raportu do XLSX.
+4. walidacja i parsowanie uploadu Virtualo,
+5. eksport raportu do XLSX.
 
 Raport jest generowany od zera przy każdym kliknięciu „Generuj” (brak cache gotowego XLSX).
 

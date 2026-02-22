@@ -71,28 +71,29 @@ $requiredReports = requiredReportsDefinitions();
               </li>
             <?php endforeach; ?>
           </ul>
-          <p class="mt-2 text-xs text-slate-500">Przycisk „Generuj” jest aktywny dopiero po poprawnym dodaniu wszystkich wymaganych raportów.</p>
+          <p class="mt-2 text-xs text-slate-500">Przycisk „Generuj” aktywuje się po dodaniu sensownego pliku (np. CSV), a pełna walidacja wymaganych raportów jest wykonywana po stronie backendu.</p>
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-slate-800 mb-2">Raport Virtualo (CSV) <span class="text-red-600">*</span></label>
+          <label class="block text-sm font-medium text-slate-800 mb-2">Raporty źródłowe (wspólny upload) <span class="text-red-600">*</span></label>
           <div id="dropZone" class="rounded-xl border-2 border-dashed border-slate-300 bg-white px-4 py-8 text-center transition">
-            <p class="text-sm text-slate-700">Przeciągnij i upuść plik CSV Virtualo tutaj</p>
+            <p class="text-sm text-slate-700">Przeciągnij i upuść wszystkie raporty tutaj</p>
             <p class="text-xs text-slate-500 mt-1">lub</p>
             <label class="inline-flex mt-3 items-center rounded-lg border border-slate-300 bg-slate-100 px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-200 cursor-pointer">
-              Wybierz plik
-              <input id="virtualoInput" name="virtualo_report" type="file" accept=".csv,text/csv" class="hidden">
+              Wybierz pliki
+              <input id="reportsInput" name="report_files[]" type="file" multiple accept=".csv,text/csv" class="hidden">
             </label>
           </div>
-          <p class="mt-2 text-xs text-slate-500">Dozwolone: .csv (Virtualo, separator ;, kolumny ISBN / L. / Marża netto).</p>
+          <p class="mt-2 text-xs text-slate-500">Dozwolone: raporty wymagane przez backend (obecnie: CSV Virtualo).</p>
         </div>
 
         <div class="rounded-xl border border-slate-200 bg-white p-4">
-          <p class="text-sm font-medium text-slate-900">Lista dodanych plików</p>
+          <p class="text-sm font-medium text-slate-900">Lista dodanych plików i rozpoznanie</p>
           <ul id="fileList" class="mt-2 text-sm text-slate-700 list-disc list-inside">
             <li class="text-slate-500">Brak pliku.</li>
           </ul>
-          <p id="validationStatus" class="mt-3 text-sm font-medium text-amber-700">Status walidacji: oczekiwanie na plik Virtualo.</p>
+          <ul id="requiredStatusList" class="mt-3 text-sm text-slate-700 space-y-1"></ul>
+          <p id="validationStatus" class="mt-3 text-sm font-medium text-amber-700">Status walidacji: oczekiwanie na pliki.</p>
         </div>
 
         <div class="flex items-center gap-3">
@@ -149,9 +150,10 @@ $requiredReports = requiredReportsDefinitions();
     (function () {
       const requiredReports = <?= json_encode($requiredReports, JSON_UNESCAPED_UNICODE) ?>;
       const form = document.getElementById('generateForm');
-      const input = document.getElementById('virtualoInput');
+      const input = document.getElementById('reportsInput');
       const dropZone = document.getElementById('dropZone');
       const fileList = document.getElementById('fileList');
+      const requiredStatusList = document.getElementById('requiredStatusList');
       const validationStatus = document.getElementById('validationStatus');
       const btn = document.getElementById('generateBtn');
       const btnLabel = document.getElementById('btnLabel');
@@ -175,40 +177,94 @@ $requiredReports = requiredReportsDefinitions();
         'Budowa raportu i przygotowanie pliku xlsx…'
       ];
 
-      function updateUiForFile() {
-        const file = input.files && input.files[0] ? input.files[0] : null;
-        fileList.innerHTML = '';
+      function findMatchingFile(requirement, files) {
+        const allowedExtensions = Array.isArray(requirement.allowed_extensions)
+          ? requirement.allowed_extensions.map((ext) => String(ext).toLowerCase())
+          : [];
 
-        if (!file) {
+        for (const file of files) {
+          const ext = (file.name.split('.').pop() || '').toLowerCase();
+          if (allowedExtensions.length === 0 || allowedExtensions.includes(ext)) {
+            return file;
+          }
+        }
+
+        return null;
+      }
+
+      function updateUiForFile() {
+        const files = Array.from(input.files || []);
+        fileList.innerHTML = '';
+        requiredStatusList.innerHTML = '';
+
+        if (files.length === 0) {
           const li = document.createElement('li');
           li.className = 'text-slate-500';
-          li.textContent = 'Brak pliku.';
+          li.textContent = 'Brak plików.';
           fileList.appendChild(li);
-          validationStatus.textContent = 'Status walidacji: oczekiwanie na plik Virtualo.';
+
+          requiredReports.forEach((report) => {
+            const statusLi = document.createElement('li');
+            statusLi.className = 'text-amber-700';
+            statusLi.textContent = `⏳ ${report.label}: oczekiwanie`;
+            requiredStatusList.appendChild(statusLi);
+          });
+
+          validationStatus.textContent = 'Status walidacji: oczekiwanie na pliki.';
           validationStatus.className = 'mt-3 text-sm font-medium text-amber-700';
           btn.disabled = true;
           return;
         }
 
-        const li = document.createElement('li');
-        li.textContent = `${file.name} (${Math.round(file.size / 1024)} KB)`;
-        fileList.appendChild(li);
+        files.forEach((file) => {
+          const li = document.createElement('li');
+          const ext = (file.name.split('.').pop() || '').toLowerCase();
+          const recognizedBy = requiredReports
+            .filter((report) => (report.allowed_extensions || []).map((e) => String(e).toLowerCase()).includes(ext))
+            .map((report) => report.label);
 
-        const ext = (file.name.split('.').pop() || '').toLowerCase();
-        if (ext !== 'csv') {
-          validationStatus.textContent = 'Status walidacji: niepoprawne rozszerzenie pliku (wymagane .csv).';
+          li.textContent = `${file.name} (${Math.round(file.size / 1024)} KB)${recognizedBy.length ? ` → ${recognizedBy.join(', ')}` : ' → nierozpoznany typ'}`;
+          fileList.appendChild(li);
+        });
+
+        let allRequiredMatched = true;
+        requiredReports.forEach((report) => {
+          const matchedFile = findMatchingFile(report, files);
+          const statusLi = document.createElement('li');
+
+          if (matchedFile) {
+            statusLi.className = 'text-emerald-700';
+            statusLi.textContent = `✅ ${report.label}: ${matchedFile.name}`;
+          } else {
+            allRequiredMatched = false;
+            statusLi.className = 'text-red-700';
+            statusLi.textContent = `❌ ${report.label}: brak pasującego pliku`;
+          }
+
+          requiredStatusList.appendChild(statusLi);
+        });
+
+        const hasCsv = files.some((file) => ((file.name.split('.').pop() || '').toLowerCase() === 'csv'));
+        if (!hasCsv) {
+          validationStatus.textContent = 'Status walidacji: brak sensownego pliku wejściowego (np. .csv).';
           validationStatus.className = 'mt-3 text-sm font-medium text-red-700';
           btn.disabled = true;
           return;
         }
 
-        validationStatus.textContent = 'Status walidacji: plik gotowy do walidacji backendowej.';
-        validationStatus.className = 'mt-3 text-sm font-medium text-emerald-700';
+        if (allRequiredMatched) {
+          validationStatus.textContent = 'Status walidacji: komplet plików wstępnie rozpoznany, backend wykona pełną walidację.';
+          validationStatus.className = 'mt-3 text-sm font-medium text-emerald-700';
+        } else {
+          validationStatus.textContent = 'Status walidacji: częściowy komplet — backend może odrzucić brakujące wymagania.';
+          validationStatus.className = 'mt-3 text-sm font-medium text-amber-700';
+        }
+
         btn.disabled = false;
       }
 
       function setBusy(isBusy) {
-        btn.disabled = isBusy || !(input.files && input.files[0]);
+        btn.disabled = isBusy || !((input.files && input.files.length > 0));
         btnSpinner.classList.toggle('hidden', !isBusy);
         btnLabel.textContent = isBusy ? 'Generuję…' : 'Generuj';
       }
@@ -268,7 +324,7 @@ $requiredReports = requiredReportsDefinitions();
         const files = e.dataTransfer.files;
         if (files && files.length > 0) {
           const transfer = new DataTransfer();
-          transfer.items.add(files[0]);
+          Array.from(files).forEach((file) => transfer.items.add(file));
           input.files = transfer.files;
           updateUiForFile();
         }
@@ -279,7 +335,7 @@ $requiredReports = requiredReportsDefinitions();
       form.addEventListener('submit', async function (e) {
         e.preventDefault();
 
-        if (!(input.files && input.files[0])) {
+        if (!(input.files && input.files.length > 0)) {
           updateUiForFile();
           return;
         }

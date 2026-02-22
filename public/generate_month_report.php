@@ -50,59 +50,95 @@ try {
 
     $requiredReports = requiredReportsDefinitions();
 
-    $uploadedReportPaths = [];
-    foreach ($requiredReports as $reportDef) {
-        $fieldName = (string)($reportDef['field_name'] ?? '');
-        $label = (string)($reportDef['label'] ?? $fieldName);
+    $rawUploads = $_FILES['report_files'] ?? null;
+    if (!is_array($rawUploads) || !isset($rawUploads['name']) || !is_array($rawUploads['name'])) {
+        jsonResponse(400, [
+            'ok' => false,
+            'message' => 'Brakuje plików uploadu. Dodaj raporty w polu „Raporty źródłowe”.',
+        ]);
+    }
 
-        if ($fieldName === '' || !isset($_FILES[$fieldName])) {
-            jsonResponse(400, [
-                'ok' => false,
-                'message' => 'Brakuje wymaganego pliku: ' . $label . '.',
-            ]);
+    $uploadedFiles = [];
+    $names = $rawUploads['name'];
+    $tmpNames = is_array($rawUploads['tmp_name'] ?? null) ? $rawUploads['tmp_name'] : [];
+    $errors = is_array($rawUploads['error'] ?? null) ? $rawUploads['error'] : [];
+
+    foreach ($names as $idx => $name) {
+        $errorCode = isset($errors[$idx]) ? (int)$errors[$idx] : UPLOAD_ERR_NO_FILE;
+        if ($errorCode === UPLOAD_ERR_NO_FILE) {
+            continue;
         }
-
-        $file = $_FILES[$fieldName];
-        if (!is_array($file)) {
-            jsonResponse(400, [
-                'ok' => false,
-                'message' => 'Niepoprawny upload dla: ' . $label . '.',
-            ]);
-        }
-
-        $errorCode = isset($file['error']) ? (int)$file['error'] : UPLOAD_ERR_NO_FILE;
         if ($errorCode !== UPLOAD_ERR_OK) {
             jsonResponse(400, [
                 'ok' => false,
-                'message' => 'Błąd uploadu dla: ' . $label . '.',
+                'message' => 'Błąd uploadu jednego z plików.',
                 'details' => ['Kod błędu uploadu: ' . $errorCode],
             ]);
         }
 
-        $tmpPath = isset($file['tmp_name']) ? (string)$file['tmp_name'] : '';
+        $tmpPath = isset($tmpNames[$idx]) ? (string)$tmpNames[$idx] : '';
         if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {
             jsonResponse(400, [
                 'ok' => false,
-                'message' => 'Nie udało się odczytać uploadu dla: ' . $label . '.',
+                'message' => 'Nie udało się odczytać jednego z uploadowanych plików.',
             ]);
         }
 
+        $origName = basename((string)$name);
+        $fileExt = strtolower((string)pathinfo($origName, PATHINFO_EXTENSION));
+
+        $uploadedFiles[] = [
+            'index' => $idx,
+            'tmp_path' => $tmpPath,
+            'orig_name' => $origName,
+            'extension' => $fileExt,
+            'used' => false,
+        ];
+    }
+
+    if ($uploadedFiles === []) {
+        jsonResponse(400, [
+            'ok' => false,
+            'message' => 'Nie przesłano żadnego poprawnego pliku.',
+        ]);
+    }
+
+    $destDir = rtrim((string)$paths['periods_dir'], DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $month . DIRECTORY_SEPARATOR . 'uploads';
+    ensureDir($destDir);
+
+    $uploadedReportPaths = [];
+    foreach ($requiredReports as $reportDef) {
+        $fieldName = (string)($reportDef['field_name'] ?? '');
+        $label = (string)($reportDef['label'] ?? $fieldName);
         $allowedExtensions = array_map(
             static fn($v): string => strtolower((string)$v),
             is_array($reportDef['allowed_extensions'] ?? null) ? $reportDef['allowed_extensions'] : []
         );
-        $origName = basename((string)($file['name'] ?? 'uploaded_file'));
-        $fileExt = strtolower((string)pathinfo($origName, PATHINFO_EXTENSION));
-        if ($allowedExtensions !== [] && !in_array($fileExt, $allowedExtensions, true)) {
+
+        $matchIndex = null;
+        foreach ($uploadedFiles as $i => $candidate) {
+            if (($candidate['used'] ?? false) === true) {
+                continue;
+            }
+
+            $ext = (string)($candidate['extension'] ?? '');
+            if ($allowedExtensions === [] || in_array($ext, $allowedExtensions, true)) {
+                $matchIndex = $i;
+                break;
+            }
+        }
+
+        if ($matchIndex === null) {
             jsonResponse(400, [
                 'ok' => false,
-                'message' => 'Niepoprawne rozszerzenie pliku dla: ' . $label . '.',
-                'details' => ['Dozwolone: ' . implode(', ', $allowedExtensions), 'Otrzymano: ' . ($fileExt !== '' ? $fileExt : '(brak)')],
+                'message' => 'Brakuje wymaganego pliku: ' . $label . '.',
+                'details' => ['Dozwolone rozszerzenia: ' . implode(', ', $allowedExtensions)],
             ]);
         }
 
-        $destDir = rtrim((string)$paths['periods_dir'], DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $month . DIRECTORY_SEPARATOR . 'uploads';
-        ensureDir($destDir);
+        $matched = $uploadedFiles[$matchIndex];
+        $origName = (string)$matched['orig_name'];
+        $tmpPath = (string)$matched['tmp_path'];
 
         $destPath = $destDir . DIRECTORY_SEPARATOR . $fieldName . '__' . $origName;
         if (!move_uploaded_file($tmpPath, $destPath)) {
@@ -111,6 +147,8 @@ try {
                 'message' => 'Nie udało się zapisać uploadu: ' . $label . '.',
             ]);
         }
+
+        $uploadedFiles[$matchIndex]['used'] = true;
 
         $uploadedReportPaths[$fieldName] = [
             'path' => $destPath,
