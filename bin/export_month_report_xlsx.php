@@ -11,14 +11,6 @@ use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-/**
- * v0.0.1-xlsx
- * Buduje finalny XLSX (tylko A:I pierwszego arkusza, bez formuł, bez dodatkowych arkuszy)
- * na bazie:
- *  - report_rows.zero_filled.json (z obecnego build_month_rows_from_woo.php)
- *  - szablonu XLSX (załączony plik użytkownika)
- */
-
 function normalizeIsbnForKey($value): ?string
 {
     if ($value === null) {
@@ -26,7 +18,6 @@ function normalizeIsbnForKey($value): ?string
     }
 
     if (is_float($value) || is_int($value)) {
-        // np. 9788365156365.0 z Excela
         $value = sprintf('%.0f', (float)$value);
     }
 
@@ -45,76 +36,58 @@ function normalizeIsbnForKey($value): ?string
 
 function isPremiereInMonth(?string $premiereDate, string $month): bool
 {
-    if ($premiereDate === null || $premiereDate === '') {
-        return false;
-    }
-
-    return str_starts_with($premiereDate, $month . '-');
+    return $premiereDate !== null && $premiereDate !== '' && str_starts_with($premiereDate, $month . '-');
 }
 
-/**
- * @param array<int,array<string,mixed>> $reportRows
- * @return array<string,array<string,mixed>>
- */
 function indexReportRowsByIsbn(array $reportRows): array
 {
     $indexed = [];
-
     foreach ($reportRows as $row) {
         if (!is_array($row)) {
             continue;
         }
+        $isbnNorm = normalizeIsbnForKey($row['isbn_norm'] ?? null);
+        if ($isbnNorm !== null) {
+            $indexed[$isbnNorm] = $row;
+        }
+    }
+    return $indexed;
+}
 
+function indexVirtualoByIsbn(array $records): array
+{
+    $out = [];
+    foreach ($records as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
         $isbnNorm = normalizeIsbnForKey($row['isbn_norm'] ?? null);
         if ($isbnNorm === null) {
             continue;
         }
-
-        $indexed[$isbnNorm] = $row;
+        $out[$isbnNorm] = [
+            'units_sold' => (int)($row['units_sold'] ?? 0),
+            'margin_net_cents' => (int)($row['margin_net_cents'] ?? 0),
+        ];
     }
-
-    return $indexed;
+    return $out;
 }
 
-/**
- * Czyta kolejność ISBN z arkusza szablonu (A4:A...)
- *
- * @return array<int,string>
- */
 function readTemplateIsbnOrder(Worksheet $sheet): array
 {
     $result = [];
     $seen = [];
-
-    $highestRow = $sheet->getHighestRow();
-
-    for ($r = 4; $r <= $highestRow; $r++) {
+    for ($r = 4; $r <= $sheet->getHighestRow(); $r++) {
         $isbn = normalizeIsbnForKey($sheet->getCell("A{$r}")->getValue());
-        if ($isbn === null) {
+        if ($isbn === null || isset($seen[$isbn])) {
             continue;
         }
-
-        if (isset($seen[$isbn])) {
-            continue;
-        }
-
         $seen[$isbn] = true;
         $result[] = $isbn;
     }
-
     return $result;
 }
 
-/**
- * Buduje ostateczną kolejność:
- * 1) wiersze z szablonu (jeśli istnieją w reportRows)
- * 2) brakujące tytuły z reportRows, ale tylko premiery z danego miesiąca
- * 3) jeśli szablon pusty -> bierzemy wszystko z reportRows
- *
- * @param array<int,string> $templateOrder
- * @param array<string,array<string,mixed>> $rowsByIsbn
- * @return array<int,array<string,mixed>>
- */
 function buildFinalRows(array $templateOrder, array $rowsByIsbn, string $month): array
 {
     $final = [];
@@ -125,7 +98,6 @@ function buildFinalRows(array $templateOrder, array $rowsByIsbn, string $month):
             if (!isset($rowsByIsbn[$isbn])) {
                 continue;
             }
-
             $final[] = $rowsByIsbn[$isbn];
             $used[$isbn] = true;
         }
@@ -134,43 +106,22 @@ function buildFinalRows(array $templateOrder, array $rowsByIsbn, string $month):
             if (isset($used[$isbn])) {
                 continue;
             }
-
-            $premiereDate = isset($row['premiere_date']) ? (string)$row['premiere_date'] : null;
-            if (isPremiereInMonth($premiereDate, $month)) {
+            if (isPremiereInMonth((string)($row['premiere_date'] ?? ''), $month)) {
                 $final[] = $row;
-                $used[$isbn] = true;
             }
         }
 
         return $final;
     }
 
-    // bootstrap: jeśli szablon nie ma listy ISBN -> bierzemy wszystko
     $rows = array_values($rowsByIsbn);
-
-    usort($rows, function (array $a, array $b): int {
-        $ta = mb_strtolower((string)($a['title'] ?? ''), 'UTF-8');
-        $tb = mb_strtolower((string)($b['title'] ?? ''), 'UTF-8');
-        if ($ta !== $tb) {
-            return $ta <=> $tb;
-        }
-        return (string)($a['isbn_norm'] ?? '') <=> (string)($b['isbn_norm'] ?? '');
-    });
-
+    usort($rows, fn(array $a, array $b): int => (string)($a['title'] ?? '') <=> (string)($b['title'] ?? ''));
     return $rows;
 }
 
 function adjustedNetCents97(array $row): int
 {
-    $netCents = 0;
-
-    if (isset($row['revenue_net_cents'])) {
-        $netCents = (int)$row['revenue_net_cents'];
-    } elseif (isset($row['revenue_net'])) {
-        $netCents = decimalStringToCents((string)$row['revenue_net']);
-    }
-
-    // hardcoded 0.97 zgodnie z wymaganiem
+    $netCents = isset($row['revenue_net_cents']) ? (int)$row['revenue_net_cents'] : decimalStringToCents((string)($row['revenue_net'] ?? '0'));
     return (int) round($netCents * 0.97, 0);
 }
 
@@ -178,18 +129,12 @@ function cloneDataRowStyleIfNeeded(Worksheet $sheet, int $targetLastRow): void
 {
     $templateStyleRow = 4;
     $highestRow = $sheet->getHighestRow();
-
     if ($targetLastRow <= $highestRow) {
         return;
     }
 
     for ($r = $highestRow + 1; $r <= $targetLastRow; $r++) {
-        $sheet->duplicateStyle(
-            $sheet->getStyle("A{$templateStyleRow}:I{$templateStyleRow}"),
-            "A{$r}:I{$r}"
-        );
-
-        // opcjonalnie wysokość wiersza
+        $sheet->duplicateStyle($sheet->getStyle("A{$templateStyleRow}:O{$templateStyleRow}"), "A{$r}:O{$r}");
         $srcHeight = $sheet->getRowDimension($templateStyleRow)->getRowHeight();
         if ($srcHeight !== null && $srcHeight > 0) {
             $sheet->getRowDimension($r)->setRowHeight($srcHeight);
@@ -200,7 +145,7 @@ function cloneDataRowStyleIfNeeded(Worksheet $sheet, int $targetLastRow): void
 function clearDataArea(Worksheet $sheet, int $fromRow, int $toRow): void
 {
     for ($r = $fromRow; $r <= $toRow; $r++) {
-        foreach (range('A', 'I') as $col) {
+        foreach (range('A', 'O') as $col) {
             $sheet->setCellValue("{$col}{$r}", null);
         }
     }
@@ -209,48 +154,39 @@ function clearDataArea(Worksheet $sheet, int $fromRow, int $toRow): void
 try {
     $config = loadConfig();
     $paths = $config['paths'] ?? [];
-
     if (!is_array($paths)) {
         throw new RuntimeException("Błąd config.local.php: sekcja 'paths' musi być tablicą.");
     }
 
     $month = parseRequiredMonthArg($argv);
-
     $periodsDir = (string)($paths['periods_dir'] ?? '');
     $templatePath = (string)($paths['monthly_report_template_xlsx'] ?? '');
 
     if ($periodsDir === '') {
-        throw new RuntimeException("Brak paths.periods_dir w config.local.php");
+        throw new RuntimeException('Brak paths.periods_dir w config.local.php');
     }
     if ($templatePath === '' || !is_file($templatePath)) {
-        throw new RuntimeException("Brak szablonu XLSX (paths.monthly_report_template_xlsx): {$templatePath}");
+        throw new RuntimeException("Brak szablonu XLSX: {$templatePath}");
     }
 
     $monthDir = rtrim($periodsDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $month . DIRECTORY_SEPARATOR . 'woo';
     ensureDir($monthDir);
 
     $reportJsonPath = $monthDir . DIRECTORY_SEPARATOR . 'report_rows.zero_filled.json';
-    if (!is_file($reportJsonPath)) {
-        throw new RuntimeException("Brak pliku {$reportJsonPath}. Najpierw uruchom build_month_rows_from_woo.php");
+    $virtualoJsonPath = rtrim($periodsDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $month . DIRECTORY_SEPARATOR . 'virtualo' . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
+    if (!is_file($reportJsonPath) || !is_file($virtualoJsonPath)) {
+        throw new RuntimeException('Brak danych wejściowych Woo i/lub Virtualo.');
     }
-
-    fwrite(STDOUT, "Budowanie XLSX za {$month}\n");
-    fwrite(STDOUT, "Szablon: {$templatePath}\n");
-    fwrite(STDOUT, "Wejście JSON: {$reportJsonPath}\n\n");
 
     $reportPayload = readJsonFile($reportJsonPath);
-    $reportRows = $reportPayload['records'] ?? null;
-
-    if (!is_array($reportRows)) {
-        throw new RuntimeException("Plik report_rows.zero_filled.json nie zawiera records[]");
-    }
+    $virtualoPayload = readJsonFile($virtualoJsonPath);
+    $reportRows = is_array($reportPayload['records'] ?? null) ? $reportPayload['records'] : [];
+    $virtualoRows = is_array($virtualoPayload['records'] ?? null) ? $virtualoPayload['records'] : [];
 
     $rowsByIsbn = indexReportRowsByIsbn($reportRows);
+    $virtualoByIsbn = indexVirtualoByIsbn($virtualoRows);
 
-    // Wczytaj szablon
     $spreadsheet = IOFactory::load($templatePath);
-
-    // Zostaw tylko pierwszy arkusz
     while ($spreadsheet->getSheetCount() > 1) {
         $spreadsheet->removeSheetByIndex($spreadsheet->getSheetCount() - 1);
     }
@@ -258,41 +194,33 @@ try {
     $sheet = $spreadsheet->getSheet(0);
     $sheet->setTitle('autozliczanie (' . $month . ')');
 
-    // Odetnij kolumny od J wzwyż
     $highestColIndex = Coordinate::columnIndexFromString($sheet->getHighestColumn());
-    if ($highestColIndex > 9) {
-        $sheet->removeColumn('J', $highestColIndex - 9);
+    if ($highestColIndex > 15) {
+        $sheet->removeColumn('P', $highestColIndex - 15);
     }
 
-    // Przeczytaj kolejność z szablonu (A4:A...)
     $templateOrder = readTemplateIsbnOrder($sheet);
-
-    // Zbuduj finalną listę wierszy (szablon + premiery miesiąca)
     $finalRows = buildFinalRows($templateOrder, $rowsByIsbn, $month);
 
-    // Upewnij się, że mamy style dla dodatkowych wierszy
-    $targetLastRow = max(4, 4 + count($finalRows));
+    // +1 pusty wiersz +1 wiersz sumy, żeby style były stabilne przy różnych długościach listy
+    $targetLastRow = max(4, 4 + count($finalRows) + 2);
     cloneDataRowStyleIfNeeded($sheet, $targetLastRow);
+    clearDataArea($sheet, 4, max($sheet->getHighestRow(), $targetLastRow));
 
-    // Nagłówki / notki (na wszelki wypadek)
     $sheet->setCellValue('B1', 'Tytuł');
     $sheet->setCellValue('E1', 'RAZEM');
     $sheet->setCellValue('H1', 'Histmag (szacunkowy)');
+    $sheet->setCellValue('K1', 'sieci');
+    $sheet->setCellValue('N1', 'Virtualo');
     $sheet->setCellValue('H2', 'kwoty są szacunkowe');
 
-    // Wyczyść stare wartości/formuły w A:I od wiersza 4 w dół
-    $clearToRow = max($sheet->getHighestRow(), $targetLastRow);
-    clearDataArea($sheet, 4, $clearToRow);
-
-    // Wpisz wartości statyczne (bez formuł)
     $r = 4;
-    $rowsAddedFromPremiere = 0;
     $totalUnits = 0;
-    $totalAdjNet = 0.0;
-    $templateOrderSet = [];
-    foreach ($templateOrder as $isbn) {
-        $templateOrderSet[$isbn] = true;
-    }
+    $totalNet = 0.0;
+    $sumHistUnits = 0;
+    $sumHistNet = 0.0;
+    $sumVirtUnits = 0;
+    $sumVirtNet = 0.0;
 
     foreach ($finalRows as $row) {
         $isbnNorm = normalizeIsbnForKey($row['isbn_norm'] ?? null);
@@ -301,93 +229,77 @@ try {
         }
 
         $title = (string)($row['title'] ?? '');
-        $units = (int)($row['units_sold'] ?? 0);
+        $histUnits = (int)($row['units_sold'] ?? 0);
+        $histNet = adjustedNetCents97($row) / 100;
 
-        $adjNetCents = adjustedNetCents97($row);
-        $adjNet = $adjNetCents / 100;
+        $virtualo = $virtualoByIsbn[$isbnNorm] ?? ['units_sold' => 0, 'margin_net_cents' => 0];
+        $virtUnits = (int)$virtualo['units_sold'];
+        $virtNet = ((int)$virtualo['margin_net_cents']) / 100;
 
-        // Wykryj dopisane premiery (nieobecne w szablonie)
-        if (!isset($templateOrderSet[$isbnNorm]) && isPremiereInMonth((string)($row['premiere_date'] ?? ''), $month)) {
-            $rowsAddedFromPremiere++;
-        }
+        // Semantyka (wariant A):
+        // - N:O = szczegół Virtualo
+        // - K:L = suma sieci zewnętrznych (na ten moment tylko Virtualo)
+        $externalNetworkUnits = $virtUnits;
+        $externalNetworkNet = $virtNet;
 
-        // A: ISBN bez myślników (jako string, żeby uniknąć problemów z floatami)
         $sheet->setCellValueExplicit("A{$r}", $isbnNorm, DataType::TYPE_STRING);
-
-        // B: Tytuł
         $sheet->setCellValueExplicit("B{$r}", $title, DataType::TYPE_STRING);
 
-        // C, D, G: puste
-        $sheet->setCellValue("C{$r}", null);
-        $sheet->setCellValue("D{$r}", null);
-        $sheet->setCellValue("G{$r}", null);
+        $sheet->setCellValue("E{$r}", $histUnits + $externalNetworkUnits);
+        $sheet->setCellValue("F{$r}", $histNet + $externalNetworkNet);
 
-        // Woo-only na dziś:
-        // E=RAZEM(szt.) = H
-        // F=RAZEM(kwota) = I
-        // H=sztuki Histmag
-        // I=kwota Histmag netto * 0.97
-        $sheet->setCellValue("E{$r}", $units);
-        $sheet->setCellValue("F{$r}", $adjNet);
-        $sheet->setCellValue("H{$r}", $units);
-        $sheet->setCellValue("I{$r}", $adjNet);
+        $sheet->setCellValue("H{$r}", $histUnits);
+        $sheet->setCellValue("I{$r}", $histNet);
 
-        $totalUnits += $units;
-        $totalAdjNet += $adjNet;
+        $sheet->setCellValue("K{$r}", $externalNetworkUnits);
+        $sheet->setCellValue("L{$r}", $externalNetworkNet);
+
+        $sheet->setCellValue("N{$r}", $virtUnits);
+        $sheet->setCellValue("O{$r}", $virtNet);
+
+        $sumHistUnits += $histUnits;
+        $sumHistNet += $histNet;
+        $sumVirtUnits += $virtUnits;
+        $sumVirtNet += $virtNet;
+        $totalUnits += ($histUnits + $externalNetworkUnits);
+        $totalNet += ($histNet + $externalNetworkNet);
 
         $r++;
     }
 
-    // Pusty wiersz oddzielający listę od sumy
-    $blankRow = $r;
-
-    // Wiersz sumaryczny po pustym wierszu
-    $summaryRow = $blankRow + 1;
-
+    $summaryRow = $r + 1;
     $sheet->setCellValueExplicit("B{$summaryRow}", 'razem:', DataType::TYPE_STRING);
-    $sheet->setCellValue("C{$summaryRow}", null);
-    $sheet->setCellValue("D{$summaryRow}", null);
-    $sheet->setCellValue("G{$summaryRow}", null);
     $sheet->setCellValue("E{$summaryRow}", $totalUnits);
-    $sheet->setCellValue("F{$summaryRow}", $totalAdjNet);
-    $sheet->setCellValue("H{$summaryRow}", $totalUnits);
-    $sheet->setCellValue("I{$summaryRow}", $totalAdjNet);
+    $sheet->setCellValue("F{$summaryRow}", $totalNet);
+    $sheet->setCellValue("H{$summaryRow}", $sumHistUnits);
+    $sheet->setCellValue("I{$summaryRow}", $sumHistNet);
+    $sheet->setCellValue("K{$summaryRow}", $sumVirtUnits);
+    $sheet->setCellValue("L{$summaryRow}", $sumVirtNet);
+    $sheet->setCellValue("N{$summaryRow}", $sumVirtUnits);
+    $sheet->setCellValue("O{$summaryRow}", $sumVirtNet);
 
-    // Zapis pliku
-    $xlsxPath = $monthDir . DIRECTORY_SEPARATOR . 'raport_sprzedazy_woo_' . $month . '.xlsx';
+    $xlsxPath = $monthDir . DIRECTORY_SEPARATOR . 'raport_sprzedazy_' . $month . '.xlsx';
+    IOFactory::createWriter($spreadsheet, 'Xlsx')->save($xlsxPath);
 
-    $writer = IOFactory::createWriter($spreadsheet, 'Xlsx');
-    $writer->save($xlsxPath);
-
-    // Manifest pomocniczy
-    $manifestPath = $monthDir . DIRECTORY_SEPARATOR . 'xlsx_manifest.json';
-    writeJsonFile($manifestPath, [
-        'snapshot_type' => 'woo_month_xlsx_manifest',
+    writeJsonFile($monthDir . DIRECTORY_SEPARATOR . 'xlsx_manifest.json', [
+        'snapshot_type' => 'month_xlsx_manifest',
         'generated_at' => gmdate('c'),
         'month' => $month,
         'template_xlsx' => $templatePath,
         'input_report_json' => $reportJsonPath,
+        'input_virtualo_json' => $virtualoJsonPath,
         'output_xlsx' => $xlsxPath,
-        'sheet_count' => 1,
-        'columns_kept' => 'A:I',
+        'columns_kept' => 'A:O',
         'formulas_in_output' => false,
-        'hardcoded_net_multiplier' => 0.97,
         'stats' => [
-            'report_rows_input' => count($reportRows),
             'rows_written' => count($finalRows),
-            'template_rows_detected' => count($templateOrder),
-            'rows_added_from_month_premieres' => $rowsAddedFromPremiere,
             'summary_row' => $summaryRow,
             'total_units' => $totalUnits,
-            'total_adjusted_net' => round($totalAdjNet, 2),
+            'total_net' => round($totalNet, 2),
         ],
     ]);
 
-    fwrite(STDOUT, "✅ Gotowe\n");
-    fwrite(STDOUT, "XLSX: {$xlsxPath}\n");
-    fwrite(STDOUT, "Manifest: {$manifestPath}\n");
-    fwrite(STDOUT, "Wiersze zapisane: " . count($finalRows) . "\n");
-
+    fwrite(STDOUT, "✅ Gotowe\nXLSX: {$xlsxPath}\n");
     exit(0);
 } catch (Throwable $e) {
     fwrite(STDERR, "\n❌ Błąd: " . $e->getMessage() . "\n");

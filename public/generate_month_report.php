@@ -5,6 +5,7 @@ declare(strict_types=1);
 date_default_timezone_set('Europe/Warsaw');
 
 require __DIR__ . '/../bin/_common.php';
+require __DIR__ . '/../bin/_virtualo.php';
 require __DIR__ . '/_web_common.php';
 
 try {
@@ -47,6 +48,116 @@ try {
     }
 
     $root = dirname(__DIR__);
+    $requiredReports = requiredReportsDefinitions();
+
+    if (!isset($_FILES['report_files']) || !is_array($_FILES['report_files'])) {
+        jsonResponse(400, [
+            'ok' => false,
+            'message' => 'Nie dodano żadnych plików raportów.',
+            'details' => ['Dodaj pliki do wspólnego pola uploadu.'],
+        ]);
+    }
+
+    $files = $_FILES['report_files'];
+    if (!isset($files['name']) || !is_array($files['name'])) {
+        jsonResponse(400, [
+            'ok' => false,
+            'message' => 'Niepoprawny format uploadu (oczekiwano report_files[]).',
+        ]);
+    }
+
+    $uploadCount = count($files['name']);
+    $destDir = rtrim((string)$paths['periods_dir'], DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $month . DIRECTORY_SEPARATOR . 'uploads';
+    ensureDir($destDir);
+
+    $uploadedFiles = [];
+    for ($i = 0; $i < $uploadCount; $i++) {
+        $errorCode = isset($files['error'][$i]) ? (int)$files['error'][$i] : UPLOAD_ERR_NO_FILE;
+        if ($errorCode === UPLOAD_ERR_NO_FILE) {
+            continue;
+        }
+        if ($errorCode !== UPLOAD_ERR_OK) {
+            jsonResponse(400, [
+                'ok' => false,
+                'message' => 'Błąd uploadu jednego z plików.',
+                'details' => ['Kod błędu uploadu: ' . $errorCode],
+            ]);
+        }
+
+        $tmpPath = isset($files['tmp_name'][$i]) ? (string)$files['tmp_name'][$i] : '';
+        if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {
+            continue;
+        }
+
+        $origName = basename((string)($files['name'][$i] ?? ('uploaded_' . $i)));
+        $destPath = $destDir . DIRECTORY_SEPARATOR . sprintf('%02d', $i) . '__' . $origName;
+
+        if (!move_uploaded_file($tmpPath, $destPath)) {
+            jsonResponse(500, [
+                'ok' => false,
+                'message' => 'Nie udało się zapisać jednego z uploadowanych plików.',
+                'details' => ['Plik: ' . $origName],
+            ]);
+        }
+
+        $uploadedFiles[] = [
+            'name' => $origName,
+            'path' => $destPath,
+            'extension' => strtolower((string)pathinfo($origName, PATHINFO_EXTENSION)),
+        ];
+    }
+
+    if ($uploadedFiles === []) {
+        jsonResponse(400, [
+            'ok' => false,
+            'message' => 'Nie dodano żadnych poprawnych plików raportów.',
+        ]);
+    }
+
+    $matchedReports = [];
+    foreach ($requiredReports as $reportDef) {
+        $sourceId = (string)($reportDef['source_id'] ?? '');
+        $label = (string)($reportDef['label'] ?? $sourceId);
+        $allowedExtensions = array_map(
+            static fn($v): string => strtolower((string)$v),
+            is_array($reportDef['allowed_extensions'] ?? null) ? $reportDef['allowed_extensions'] : []
+        );
+
+        $candidates = array_values(array_filter(
+            $uploadedFiles,
+            static fn(array $f): bool => $allowedExtensions === [] || in_array($f['extension'], $allowedExtensions, true)
+        ));
+
+        if ($sourceId === 'virtualo') {
+            $errors = [];
+            foreach ($candidates as $candidate) {
+                $check = validateAndParseVirtualoCsv((string)$candidate['path'], (string)$candidate['name']);
+                if (($check['ok'] ?? false) === true) {
+                    $matchedReports[$sourceId] = $candidate;
+                    break;
+                }
+
+                $details = is_array($check['details'] ?? null) ? $check['details'] : [];
+                $errors[] = (string)$candidate['name'] . ': ' . (string)($check['message'] ?? 'nieznany błąd')
+                    . ($details !== [] ? (' (' . implode(' | ', $details) . ')') : '');
+            }
+
+            if (!isset($matchedReports[$sourceId])) {
+                jsonResponse(400, [
+                    'ok' => false,
+                    'message' => 'Brakuje poprawnego wymaganego raportu: ' . $label . '.',
+                    'details' => $errors !== [] ? $errors : ['Nie znaleziono pasujących plików o dozwolonym rozszerzeniu.'],
+                ]);
+            }
+
+            continue;
+        }
+
+        jsonResponse(500, [
+            'ok' => false,
+            'message' => 'Nieobsługiwany wymagany raport: ' . $sourceId,
+        ]);
+    }
 
     $steps = [
         [
@@ -62,7 +173,15 @@ try {
             'cmd' => escapeshellarg($phpCli) . ' ' . escapeshellarg($root . '/bin/build_month_rows_from_woo.php') . ' --month=' . escapeshellarg($month),
         ],
         [
-            'label' => 'Budowa pliku XLSX (A:I, bez formuł)',
+            'label' => 'Walidacja i parsowanie raportu Virtualo',
+            'cmd' => escapeshellarg($phpCli)
+                . ' ' . escapeshellarg($root . '/bin/ingest_virtualo_report_month.php')
+                . ' --month=' . escapeshellarg($month)
+                . ' --input=' . escapeshellarg((string)$matchedReports['virtualo']['path'])
+                . ' --original-name=' . escapeshellarg((string)$matchedReports['virtualo']['name']),
+        ],
+        [
+            'label' => 'Budowa pliku XLSX',
             'cmd' => escapeshellarg($phpCli) . ' ' . escapeshellarg($root . '/bin/export_month_report_xlsx.php') . ' --month=' . escapeshellarg($month),
         ],
     ];
