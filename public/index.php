@@ -178,6 +178,7 @@ $requiredReports = requiredReportsDefinitions();
         'Parsowanie raportu Publio…',
         'Parsowanie raportu Legimi…',
         'Parsowanie raportu Nexto…',
+        'Parsowanie raportu Woblink…',
         'Budowa raportu i przygotowanie pliku xlsx…'
       ];
 
@@ -347,7 +348,7 @@ $requiredReports = requiredReportsDefinitions();
       async function analyzeFile(file) {
         const ext = getFileExtension(file.name);
         if (ext === 'xlsx') {
-          return { kind: 'xlsx_shared', message: '⏳ Typ raportu XLSX zostanie potwierdzony przez backend (Legimi/Nexto)' };
+          return { kind: 'xlsx_shared', message: '⏳ Typ raportu XLSX zostanie potwierdzony przez backend (Legimi/Nexto/Woblink)' };
         }
         if (ext !== 'csv') {
           return { kind: 'unsupported', message: '⚠️ nierozpoznany typ pliku', ext };
@@ -362,7 +363,7 @@ $requiredReports = requiredReportsDefinitions();
 
 
       function isXlsxSharedSource(sourceId) {
-        return sourceId === 'legimi' || sourceId === 'nexto';
+        return sourceId === 'legimi' || sourceId === 'nexto' || sourceId === 'woblink';
       }
 
       function matchReportForUi(report, analyzed) {

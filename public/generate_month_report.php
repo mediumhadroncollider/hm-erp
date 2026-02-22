@@ -10,6 +10,7 @@ require __DIR__ . '/../bin/_empik.php';
 require __DIR__ . '/../bin/_publio.php';
 require __DIR__ . '/../bin/_legimi.php';
 require __DIR__ . '/../bin/_nexto.php';
+require __DIR__ . '/../bin/_woblink.php';
 require __DIR__ . '/_web_common.php';
 
 try {
@@ -267,6 +268,14 @@ try {
                 . ' --month=' . escapeshellarg($month)
                 . ' --input=' . escapeshellarg((string)$uploadedReportPaths['nexto_report']['path'])
                 . ' --original-name=' . escapeshellarg((string)$uploadedReportPaths['nexto_report']['name']),
+        ],
+        [
+            'label' => 'Walidacja i parsowanie raportu Woblink',
+            'cmd' => escapeshellarg($phpCli)
+                . ' ' . escapeshellarg($root . '/bin/ingest_woblink_report_month.php')
+                . ' --month=' . escapeshellarg($month)
+                . ' --input=' . escapeshellarg((string)$uploadedReportPaths['woblink_report']['path'])
+                . ' --original-name=' . escapeshellarg((string)$uploadedReportPaths['woblink_report']['name']),
         ],
         [
             'label' => 'Budowa pliku XLSX',

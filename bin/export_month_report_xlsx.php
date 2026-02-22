@@ -11,7 +11,7 @@ use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-const REPORT_LAST_COLUMN = 'AB';
+const REPORT_LAST_COLUMN = 'AD';
 
 function normalizeIsbnForKey($value): ?string
 {
@@ -180,6 +180,7 @@ try {
     $publioDir = $monthRootDir . DIRECTORY_SEPARATOR . 'publio';
     $legimiDir = $monthRootDir . DIRECTORY_SEPARATOR . 'legimi';
     $nextoDir = $monthRootDir . DIRECTORY_SEPARATOR . 'nexto';
+    $woblinkDir = $monthRootDir . DIRECTORY_SEPARATOR . 'woblink';
     ensureDir($monthDir);
 
     $reportJsonPath = $monthDir . DIRECTORY_SEPARATOR . 'report_rows.zero_filled.json';
@@ -188,6 +189,7 @@ try {
     $publioJsonPath = $publioDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
     $legimiJsonPath = $legimiDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
     $nextoJsonPath = $nextoDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
+    $woblinkJsonPath = $woblinkDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
     if (!is_file($reportJsonPath) || !is_file($virtualoJsonPath) || !is_file($empikJsonPath) || !is_file($publioJsonPath) || !is_file($legimiJsonPath) || !is_file($nextoJsonPath)) {
         throw new RuntimeException('Brak danych wejściowych Woo i/lub Virtualo i/lub Empik i/lub Publio i/lub Legimi i/lub Nexto.');
     }
@@ -198,12 +200,14 @@ try {
     $publioPayload = readJsonFile($publioJsonPath);
     $legimiPayload = readJsonFile($legimiJsonPath);
     $nextoPayload = readJsonFile($nextoJsonPath);
+    $woblinkPayload = readJsonFile($woblinkJsonPath);
     $reportRows = is_array($reportPayload['records'] ?? null) ? $reportPayload['records'] : [];
     $virtualoRows = is_array($virtualoPayload['records'] ?? null) ? $virtualoPayload['records'] : [];
     $empikRows = is_array($empikPayload['records'] ?? null) ? $empikPayload['records'] : [];
     $publioRows = is_array($publioPayload['records'] ?? null) ? $publioPayload['records'] : [];
     $legimiRows = is_array($legimiPayload['records'] ?? null) ? $legimiPayload['records'] : [];
     $nextoRows = is_array($nextoPayload['records'] ?? null) ? $nextoPayload['records'] : [];
+    $woblinkRows = is_array($woblinkPayload['records'] ?? null) ? $woblinkPayload['records'] : [];
 
     $rowsByIsbn = indexReportRowsByIsbn($reportRows);
     $virtualoByIsbn = indexExternalSourceByIsbn($virtualoRows);
@@ -211,6 +215,7 @@ try {
     $publioByIsbn = indexExternalSourceByIsbn($publioRows);
     $legimiByIsbn = indexExternalSourceByIsbn($legimiRows);
     $nextoByIsbn = indexExternalSourceByIsbn($nextoRows);
+    $woblinkByIsbn = indexExternalSourceByIsbn($woblinkRows);
 
     $spreadsheet = IOFactory::load($templatePath);
     while ($spreadsheet->getSheetCount() > 1) {
@@ -243,6 +248,7 @@ try {
     $sheet->setCellValue('T1', 'Publio');
     $sheet->setCellValue('W1', 'Legimi');
     $sheet->setCellValue('Z1', 'Nexto');
+    $sheet->setCellValue('AC1', 'Woblink');
     $sheet->setCellValue('H2', 'kwoty są szacunkowe');
 
     $r = 4;
@@ -262,6 +268,8 @@ try {
     $sumLegimiNet = 0.0;
     $sumNextoUnits = 0;
     $sumNextoNet = 0.0;
+    $sumWoblinkUnits = 0;
+    $sumWoblinkNet = 0.0;
 
     foreach ($finalRows as $row) {
         $isbnNorm = normalizeIsbnForKey($row['isbn_norm'] ?? null);
@@ -293,8 +301,12 @@ try {
         $nextoUnits = (int)$nexto['units_sold'];
         $nextoNet = ((int)$nexto['margin_net_cents']) / 100;
 
-        $externalNetworkUnits = $virtUnits + $empikUnits + $publioUnits + $legimiUnits + $nextoUnits;
-        $externalNetworkNet = $virtNet + $empikNet + $publioNet + $legimiNet + $nextoNet;
+        $woblink = $woblinkByIsbn[$isbnNorm] ?? ['units_sold' => 0, 'margin_net_cents' => 0];
+        $woblinkUnits = (int)$woblink['units_sold'];
+        $woblinkNet = ((int)$woblink['margin_net_cents']) / 100;
+
+        $externalNetworkUnits = $virtUnits + $empikUnits + $publioUnits + $legimiUnits + $nextoUnits + $woblinkUnits;
+        $externalNetworkNet = $virtNet + $empikNet + $publioNet + $legimiNet + $nextoNet + $woblinkNet;
 
         $sheet->setCellValueExplicit("A{$r}", $isbnNorm, DataType::TYPE_STRING);
         $sheet->setCellValueExplicit("B{$r}", $title, DataType::TYPE_STRING);
@@ -323,6 +335,9 @@ try {
         $sheet->setCellValue("Z{$r}", $nextoUnits);
         $sheet->setCellValue("AA{$r}", $nextoNet);
 
+        $sheet->setCellValue("AC{$r}", $woblinkUnits);
+        $sheet->setCellValue("AD{$r}", $woblinkNet);
+
         $sumHistUnits += $histUnits;
         $sumHistNet += $histNet;
         $sumVirtUnits += $virtUnits;
@@ -337,6 +352,8 @@ try {
         $sumLegimiNet += $legimiNet;
         $sumNextoUnits += $nextoUnits;
         $sumNextoNet += $nextoNet;
+        $sumWoblinkUnits += $woblinkUnits;
+        $sumWoblinkNet += $woblinkNet;
         $totalUnits += ($histUnits + $externalNetworkUnits);
         $totalNet += ($histNet + $externalNetworkNet);
 
@@ -361,6 +378,8 @@ try {
     $sheet->setCellValue("X{$summaryRow}", $sumLegimiNet);
     $sheet->setCellValue("Z{$summaryRow}", $sumNextoUnits);
     $sheet->setCellValue("AA{$summaryRow}", $sumNextoNet);
+    $sheet->setCellValue("AC{$summaryRow}", $sumWoblinkUnits);
+    $sheet->setCellValue("AD{$summaryRow}", $sumWoblinkNet);
     $xlsxPath = $monthDir . DIRECTORY_SEPARATOR . 'raport_sprzedazy_' . $month . '.xlsx';
     IOFactory::createWriter($spreadsheet, 'Xlsx')->save($xlsxPath);
 
@@ -375,6 +394,7 @@ try {
         'input_publio_json' => $publioJsonPath,
         'input_legimi_json' => $legimiJsonPath,
         'input_nexto_json' => $nextoJsonPath,
+        'input_woblink_json' => $woblinkJsonPath,
         'output_xlsx' => $xlsxPath,
         'columns_kept' => 'A:' . REPORT_LAST_COLUMN,
         'formulas_in_output' => false,

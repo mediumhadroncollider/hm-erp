@@ -63,6 +63,14 @@ function requiredReportsDefinitions(): array
             'detector' => 'validateAndParseNextoXlsx',
             'ingest_script' => 'ingest_nexto_report_month.php',
         ],
+        [
+            'source_id' => 'woblink',
+            'field_name' => 'woblink_report',
+            'label' => 'Raport Woblink',
+            'allowed_extensions' => ['xlsx'],
+            'detector' => 'validateAndParseWoblinkXlsx',
+            'ingest_script' => 'ingest_woblink_report_month.php',
+        ],
     ];
 }
 
