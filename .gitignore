@@ -1,0 +1,27 @@
+# Lokalne sekrety / konfiguracja
+/config.local.php
+/.env
+/.env.*
+
+# Zależności
+/vendor/
+
+# Dane robocze i wyniki pipeline'u
+/data/
+
+# Archiwa i eksporty
+*.zip
+*.xlsx
+*.csv
+*.log
+
+!templates/month_template.xlsx
+
+# Edytory / IDE / systemowe śmieci
+/.idea/
+/.vscode/
+.DS_Store
+Thumbs.db
+
+# PHP / narzędzia
+/.phpunit.result.cache
