@@ -39,6 +39,14 @@ function requiredReportsDefinitions(): array
             'detector' => 'validateAndParseEmpikCsv',
             'ingest_script' => 'ingest_empik_report_month.php',
         ],
+        [
+            'source_id' => 'publio',
+            'field_name' => 'publio_report',
+            'label' => 'Raport sprzedaży Publio',
+            'allowed_extensions' => ['csv'],
+            'detector' => 'validateAndParsePublioCsv',
+            'ingest_script' => 'ingest_publio_report_month.php',
+        ],
     ];
 }
 
