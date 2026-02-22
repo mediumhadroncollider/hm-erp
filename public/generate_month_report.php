@@ -11,6 +11,7 @@ require __DIR__ . '/../bin/_publio.php';
 require __DIR__ . '/../bin/_legimi.php';
 require __DIR__ . '/../bin/_nexto.php';
 require __DIR__ . '/../bin/_woblink.php';
+require __DIR__ . '/../bin/_ebookpoint.php';
 require __DIR__ . '/_web_common.php';
 
 try {
@@ -146,24 +147,30 @@ try {
             }
         }
 
+        $isRequiredForGeneration = (bool)($reportDef['is_required_for_generation'] ?? true);
+
         if ($candidates === []) {
-            $details = ['Nie znaleziono poprawnego raportu: ' . $label . '.'];
-            foreach ($classificationErrors as $error) {
-                if (($error['label'] ?? '') !== $label) {
-                    continue;
+            if ($isRequiredForGeneration) {
+                $details = ['Nie znaleziono poprawnego raportu: ' . $label . '.'];
+                foreach ($classificationErrors as $error) {
+                    if (($error['label'] ?? '') !== $label) {
+                        continue;
+                    }
+                    $line = 'Plik ' . $error['file'] . ': ' . $error['message'];
+                    if (($error['details'] ?? []) !== []) {
+                        $line .= ' (' . implode(' | ', $error['details']) . ')';
+                    }
+                    $details[] = $line;
                 }
-                $line = 'Plik ' . $error['file'] . ': ' . $error['message'];
-                if (($error['details'] ?? []) !== []) {
-                    $line .= ' (' . implode(' | ', $error['details']) . ')';
-                }
-                $details[] = $line;
+
+                jsonResponse(400, [
+                    'ok' => false,
+                    'message' => 'Brakuje wymaganego raportu: ' . $label . '.',
+                    'details' => $details,
+                ]);
             }
 
-            jsonResponse(400, [
-                'ok' => false,
-                'message' => 'Brakuje wymaganego raportu: ' . $label . '.',
-                'details' => $details,
-            ]);
+            continue;
         }
 
         if (count($candidates) > 1) {
@@ -194,7 +201,7 @@ try {
         $label = (string)($reportDef['label'] ?? $fieldName);
         $matched = $classifiedReports[$fieldName] ?? null;
         if (!is_array($matched)) {
-            throw new RuntimeException('Brak skalsyfikowanego pliku dla: ' . $label);
+            continue;
         }
 
         $origName = (string)$matched['orig_name'];
@@ -276,6 +283,22 @@ try {
                 . ' --month=' . escapeshellarg($month)
                 . ' --input=' . escapeshellarg((string)$uploadedReportPaths['woblink_report']['path'])
                 . ' --original-name=' . escapeshellarg((string)$uploadedReportPaths['woblink_report']['name']),
+        ],
+        [
+            'label' => 'Walidacja i parsowanie raportu ebookpoint',
+            'cmd' => escapeshellarg($phpCli)
+                . ' ' . escapeshellarg($root . '/bin/ingest_ebookpoint_report_month.php')
+                . ' --month=' . escapeshellarg($month)
+                . ' --input=' . escapeshellarg((string)$uploadedReportPaths['ebookpoint_report']['path'])
+                . ' --original-name=' . escapeshellarg((string)$uploadedReportPaths['ebookpoint_report']['name']),
+        ],
+        [
+            'label' => 'Walidacja i parsowanie raportu nasbi',
+            'cmd' => escapeshellarg($phpCli)
+                . ' ' . escapeshellarg($root . '/bin/ingest_nasbi_report_month.php')
+                . ' --month=' . escapeshellarg($month)
+                . ' --input=' . escapeshellarg((string)$uploadedReportPaths['nasbi_report']['path'])
+                . ' --original-name=' . escapeshellarg((string)$uploadedReportPaths['nasbi_report']['name']),
         ],
         [
             'label' => 'Budowa pliku XLSX',

@@ -30,6 +30,8 @@ function requiredReportsDefinitions(): array
             'allowed_extensions' => ['csv'],
             'detector' => 'validateAndParseVirtualoCsv',
             'ingest_script' => 'ingest_virtualo_report_month.php',
+            'is_supported' => true,
+            'is_required_for_generation' => true,
         ],
         [
             'source_id' => 'empik',
@@ -38,6 +40,8 @@ function requiredReportsDefinitions(): array
             'allowed_extensions' => ['csv'],
             'detector' => 'validateAndParseEmpikCsv',
             'ingest_script' => 'ingest_empik_report_month.php',
+            'is_supported' => true,
+            'is_required_for_generation' => true,
         ],
         [
             'source_id' => 'publio',
@@ -46,6 +50,8 @@ function requiredReportsDefinitions(): array
             'allowed_extensions' => ['csv'],
             'detector' => 'validateAndParsePublioCsv',
             'ingest_script' => 'ingest_publio_report_month.php',
+            'is_supported' => true,
+            'is_required_for_generation' => true,
         ],
         [
             'source_id' => 'legimi',
@@ -54,6 +60,8 @@ function requiredReportsDefinitions(): array
             'allowed_extensions' => ['xlsx'],
             'detector' => 'validateAndParseLegimiXlsx',
             'ingest_script' => 'ingest_legimi_report_month.php',
+            'is_supported' => true,
+            'is_required_for_generation' => true,
         ],
         [
             'source_id' => 'nexto',
@@ -62,6 +70,8 @@ function requiredReportsDefinitions(): array
             'allowed_extensions' => ['xlsx'],
             'detector' => 'validateAndParseNextoXlsx',
             'ingest_script' => 'ingest_nexto_report_month.php',
+            'is_supported' => true,
+            'is_required_for_generation' => true,
         ],
         [
             'source_id' => 'woblink',
@@ -70,6 +80,28 @@ function requiredReportsDefinitions(): array
             'allowed_extensions' => ['xlsx'],
             'detector' => 'validateAndParseWoblinkXlsx',
             'ingest_script' => 'ingest_woblink_report_month.php',
+            'is_supported' => true,
+            'is_required_for_generation' => true,
+        ],
+        [
+            'source_id' => 'ebookpoint',
+            'field_name' => 'ebookpoint_report',
+            'label' => 'Raport ebookpoint',
+            'allowed_extensions' => ['csv'],
+            'detector' => 'validateAndParseEbookpointCsv',
+            'ingest_script' => 'ingest_ebookpoint_report_month.php',
+            'is_supported' => true,
+            'is_required_for_generation' => true,
+        ],
+        [
+            'source_id' => 'nasbi',
+            'field_name' => 'nasbi_report',
+            'label' => 'Raport ebookpoint BIBLIO / nasbi',
+            'allowed_extensions' => ['csv'],
+            'detector' => 'validateAndParseNasbiCsv',
+            'ingest_script' => 'ingest_nasbi_report_month.php',
+            'is_supported' => true,
+            'is_required_for_generation' => true,
         ],
     ];
 }

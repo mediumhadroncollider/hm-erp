@@ -179,6 +179,8 @@ $requiredReports = requiredReportsDefinitions();
         'Parsowanie raportu Legimi…',
         'Parsowanie raportu Nexto…',
         'Parsowanie raportu Woblink…',
+        'Parsowanie raportu ebookpoint…',
+        'Parsowanie raportu nasbi…',
         'Budowa raportu i przygotowanie pliku xlsx…'
       ];
 
@@ -204,6 +206,22 @@ $requiredReports = requiredReportsDefinitions();
           ['isbn/issn/ismn'],
           ['liczba sprzedanych egzemplarzy'],
           ['kwota dla wydawcy netto']
+        ],
+        ebookpoint: [
+          ['id'],
+          ['tytul'],
+          ['isbn'],
+          ['liczba'],
+          ['wartosc netto'],
+          ['prowizja ebookpoint.pl']
+        ],
+        nasbi: [
+          ['id'],
+          ['tytul'],
+          ['isbn'],
+          ['liczba'],
+          ['wartosc netto'],
+          ['prowizja ebookpoint biblio']
         ]
       };
 
@@ -258,7 +276,9 @@ $requiredReports = requiredReportsDefinitions();
       }
 
       function findFirstNonEmptyLine(text) {
-        const lines = String(text || '').split(/\r\n|\n|\r/);
+        const lines = String(text || '').split(/
+|
+|/);
         for (const line of lines) {
           if (line.trim() !== '') {
             return line;
@@ -308,25 +328,33 @@ $requiredReports = requiredReportsDefinitions();
       async function analyzeCsvFile(file) {
         const buffer = await readFileChunk(file, FILE_READ_LIMIT_BYTES);
         const text = decodeBuffer(buffer);
-        const headerLine = findFirstNonEmptyLine(text);
-        if (!headerLine) {
-          return { kind: 'unknown', message: '⚠️ CSV nierozpoznany (pusty nagłówek).' };
-        }
-
-        const separator = detectSeparator(headerLine);
-        const rawHeaders = parseCsvLine(headerLine, separator);
-        const headers = rawHeaders.map(normalizeHeaderValue).filter((h) => h.length > 0);
-        const headerSet = new Set(headers);
+        const lines = String(text || '').split(/\r\n|\n|\r/);
 
         const matches = [];
-        if (signatureMatches(headerSet, reportSignatures.virtualo)) {
-          matches.push('virtualo');
-        }
-        if (signatureMatches(headerSet, reportSignatures.empik)) {
-          matches.push('empik');
-        }
-        if (signatureMatches(headerSet, reportSignatures.publio)) {
-          matches.push('publio');
+        for (const sourceId of Object.keys(reportSignatures)) {
+          const signature = reportSignatures[sourceId];
+          let matched = false;
+
+          for (const line of lines) {
+            const lineTrimmed = line.trim();
+            if (!lineTrimmed || lineTrimmed.indexOf(';') === -1) {
+              continue;
+            }
+
+            const separator = detectSeparator(lineTrimmed);
+            const rawHeaders = parseCsvLine(lineTrimmed, separator);
+            const headers = rawHeaders.map(normalizeHeaderValue).filter((h) => h.length > 0);
+            const headerSet = new Set(headers);
+
+            if (signatureMatches(headerSet, signature)) {
+              matched = true;
+              break;
+            }
+          }
+
+          if (matched) {
+            matches.push(sourceId);
+          }
         }
 
         if (matches.length === 1) {
@@ -335,7 +363,11 @@ $requiredReports = requiredReportsDefinitions();
             kind,
             message: kind === 'virtualo'
               ? '✅ rozpoznano jako Virtualo'
-              : (kind === 'empik' ? '✅ rozpoznano jako Empik' : '✅ rozpoznano jako Publio')
+              : (kind === 'empik'
+                  ? '✅ rozpoznano jako Empik'
+                  : (kind === 'publio'
+                      ? '✅ rozpoznano jako Publio'
+                      : (kind === 'ebookpoint' ? '✅ rozpoznano jako ebookpoint' : '✅ rozpoznano jako nasbi')))
           };
         }
         if (matches.length > 1) {
@@ -415,6 +447,8 @@ $requiredReports = requiredReportsDefinitions();
           const matched = matchReportForUi(report, analyzed);
           const statusLi = document.createElement('li');
 
+          const isRequired = report.is_required_for_generation !== false;
+
           if (matched) {
             if (isXlsxSharedSource(report.source_id)) {
               statusLi.className = 'text-amber-700';
@@ -424,9 +458,14 @@ $requiredReports = requiredReportsDefinitions();
               statusLi.textContent = `✅ ${report.label}: ${matched.file.name}`;
             }
           } else {
-            allRequiredMatched = false;
-            statusLi.className = 'text-red-700';
-            statusLi.textContent = `❌ ${report.label}: brak pliku rozpoznanego po nagłówkach/typie`;
+            if (isRequired) {
+              allRequiredMatched = false;
+              statusLi.className = 'text-red-700';
+              statusLi.textContent = `❌ ${report.label}: brak pliku rozpoznanego po nagłówkach/typie`;
+            } else {
+              statusLi.className = 'text-amber-700';
+              statusLi.textContent = `⏳ ${report.label}: opcjonalny (backend uzupełni zerami)`;
+            }
           }
 
           requiredStatusList.appendChild(statusLi);
