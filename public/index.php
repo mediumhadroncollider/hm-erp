@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 date_default_timezone_set('Europe/Warsaw');
 
+require __DIR__ . '/_web_common.php';
+
 function previousFullMonthInfo(string $tz = 'Europe/Warsaw'): array
 {
     $timezone = new DateTimeZone($tz);
@@ -35,6 +37,7 @@ function previousFullMonthInfo(string $tz = 'Europe/Warsaw'): array
 }
 
 $info = previousFullMonthInfo();
+$requiredReports = requiredReportsDefinitions();
 ?>
 <!doctype html>
 <html lang="pl">
@@ -57,15 +60,46 @@ $info = previousFullMonthInfo();
         </p>
       </div>
 
-      <p class="text-slate-700 mb-8">
-        tu będzie formularz.
-      </p>
+      <form id="generateForm" method="post" action="generate_month_report.php" class="space-y-5" enctype="multipart/form-data">
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p class="text-sm font-medium text-slate-900 mb-2">Wymagane raporty do uploadu:</p>
+          <ul class="list-disc list-inside text-sm text-slate-700">
+            <?php foreach ($requiredReports as $report): ?>
+              <li>
+                <?= htmlspecialchars((string)$report['label'], ENT_QUOTES, 'UTF-8') ?>
+                (<?= htmlspecialchars(implode(', ', (array)$report['allowed_extensions']), ENT_QUOTES, 'UTF-8') ?>)
+              </li>
+            <?php endforeach; ?>
+          </ul>
+          <p class="mt-2 text-xs text-slate-500">Przycisk „Generuj” jest aktywny dopiero po poprawnym dodaniu wszystkich wymaganych raportów.</p>
+        </div>
 
-      <form id="generateForm" method="post" action="generate_month_report.php" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-800 mb-2">Raport Virtualo (CSV) <span class="text-red-600">*</span></label>
+          <div id="dropZone" class="rounded-xl border-2 border-dashed border-slate-300 bg-white px-4 py-8 text-center transition">
+            <p class="text-sm text-slate-700">Przeciągnij i upuść plik CSV Virtualo tutaj</p>
+            <p class="text-xs text-slate-500 mt-1">lub</p>
+            <label class="inline-flex mt-3 items-center rounded-lg border border-slate-300 bg-slate-100 px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-200 cursor-pointer">
+              Wybierz plik
+              <input id="virtualoInput" name="virtualo_report" type="file" accept=".csv,text/csv" class="hidden">
+            </label>
+          </div>
+          <p class="mt-2 text-xs text-slate-500">Dozwolone: .csv (Virtualo, separator ;, kolumny ISBN / L. / Marża netto).</p>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-white p-4">
+          <p class="text-sm font-medium text-slate-900">Lista dodanych plików</p>
+          <ul id="fileList" class="mt-2 text-sm text-slate-700 list-disc list-inside">
+            <li class="text-slate-500">Brak pliku.</li>
+          </ul>
+          <p id="validationStatus" class="mt-3 text-sm font-medium text-amber-700">Status walidacji: oczekiwanie na plik Virtualo.</p>
+        </div>
+
         <div class="flex items-center gap-3">
           <button
             id="generateBtn"
             type="submit"
+            disabled
             class="inline-flex items-center justify-center gap-2 rounded-lg border border-transparent bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <svg id="btnSpinner" class="hidden animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -75,12 +109,9 @@ $info = previousFullMonthInfo();
             <span id="btnLabel">Generuj</span>
           </button>
 
-          <span class="text-sm text-slate-500">
-            Po kliknięciu zostanie pobrany plik xlsx.
-          </span>
+          <span class="text-sm text-slate-500">Po kliknięciu zostanie pobrany plik xlsx.</span>
         </div>
 
-        <!-- Loading / progress -->
         <div id="loadingBox" class="hidden rounded-xl border border-blue-200 bg-blue-50 p-4">
           <div class="flex items-start gap-3">
             <svg class="animate-spin h-5 w-5 mt-0.5 text-blue-700 flex-shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -90,33 +121,21 @@ $info = previousFullMonthInfo();
             <div>
               <p class="text-sm font-medium text-blue-900">Generowanie trwa…</p>
               <p id="loadingStep" class="text-sm text-blue-800 mt-1">Uruchamianie pipeline’u…</p>
-              <p class="text-xs text-blue-700 mt-2">
-                To może potrwać chwilę (pobieranie katalogu, zamówień i budowa xlsx).
-              </p>
             </div>
           </div>
         </div>
 
-        <!-- Success -->
         <div id="successBox" class="hidden rounded-xl border border-emerald-200 bg-emerald-50 p-4">
           <p id="successTitle" class="text-sm font-medium text-emerald-900">Raport gotowy.</p>
           <p id="successText" class="text-sm text-emerald-800 mt-1"></p>
           <div class="mt-3">
-            <a
-              id="downloadLink"
-              href="#"
-              class="inline-flex items-center rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
-            >
-              Pobierz ponownie xlsx
-            </a>
+            <a id="downloadLink" href="#" class="inline-flex items-center rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100">Pobierz ponownie xlsx</a>
           </div>
         </div>
 
-        <!-- Error -->
         <div id="errorBox" class="hidden rounded-xl border border-red-200 bg-red-50 p-4">
           <p class="text-sm font-medium text-red-900">Nie udało się wygenerować raportu.</p>
           <p id="errorText" class="text-sm text-red-800 mt-1"></p>
-
           <details id="errorDetailsWrap" class="mt-3 hidden">
             <summary class="cursor-pointer text-sm font-medium text-red-900">Pokaż szczegóły techniczne</summary>
             <pre id="errorDetails" class="mt-2 text-xs bg-white border border-red-200 rounded-lg p-3 overflow-auto whitespace-pre-wrap"></pre>
@@ -128,19 +147,20 @@ $info = previousFullMonthInfo();
 
   <script>
     (function () {
+      const requiredReports = <?= json_encode($requiredReports, JSON_UNESCAPED_UNICODE) ?>;
       const form = document.getElementById('generateForm');
+      const input = document.getElementById('virtualoInput');
+      const dropZone = document.getElementById('dropZone');
+      const fileList = document.getElementById('fileList');
+      const validationStatus = document.getElementById('validationStatus');
       const btn = document.getElementById('generateBtn');
       const btnLabel = document.getElementById('btnLabel');
       const btnSpinner = document.getElementById('btnSpinner');
-
       const loadingBox = document.getElementById('loadingBox');
       const loadingStep = document.getElementById('loadingStep');
-
       const successBox = document.getElementById('successBox');
-      const successTitle = document.getElementById('successTitle');
       const successText = document.getElementById('successText');
       const downloadLink = document.getElementById('downloadLink');
-
       const errorBox = document.getElementById('errorBox');
       const errorText = document.getElementById('errorText');
       const errorDetailsWrap = document.getElementById('errorDetailsWrap');
@@ -151,11 +171,44 @@ $info = previousFullMonthInfo();
         'Uruchamianie pipeline’u…',
         'Pobieranie katalogu produktów z WooCommerce…',
         'Pobieranie zamówień za poprzedni miesiąc…',
+        'Parsowanie raportu Virtualo…',
         'Budowa raportu i przygotowanie pliku xlsx…'
       ];
 
+      function updateUiForFile() {
+        const file = input.files && input.files[0] ? input.files[0] : null;
+        fileList.innerHTML = '';
+
+        if (!file) {
+          const li = document.createElement('li');
+          li.className = 'text-slate-500';
+          li.textContent = 'Brak pliku.';
+          fileList.appendChild(li);
+          validationStatus.textContent = 'Status walidacji: oczekiwanie na plik Virtualo.';
+          validationStatus.className = 'mt-3 text-sm font-medium text-amber-700';
+          btn.disabled = true;
+          return;
+        }
+
+        const li = document.createElement('li');
+        li.textContent = `${file.name} (${Math.round(file.size / 1024)} KB)`;
+        fileList.appendChild(li);
+
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        if (ext !== 'csv') {
+          validationStatus.textContent = 'Status walidacji: niepoprawne rozszerzenie pliku (wymagane .csv).';
+          validationStatus.className = 'mt-3 text-sm font-medium text-red-700';
+          btn.disabled = true;
+          return;
+        }
+
+        validationStatus.textContent = 'Status walidacji: plik gotowy do walidacji backendowej.';
+        validationStatus.className = 'mt-3 text-sm font-medium text-emerald-700';
+        btn.disabled = false;
+      }
+
       function setBusy(isBusy) {
-        btn.disabled = isBusy;
+        btn.disabled = isBusy || !(input.files && input.files[0]);
         btnSpinner.classList.toggle('hidden', !isBusy);
         btnLabel.textContent = isBusy ? 'Generuję…' : 'Generuj';
       }
@@ -171,7 +224,6 @@ $info = previousFullMonthInfo();
       function startLoadingTicker() {
         let i = 0;
         loadingStep.textContent = loadingMessages[0];
-
         loadingTimer = window.setInterval(() => {
           i = (i + 1) % loadingMessages.length;
           loadingStep.textContent = loadingMessages[i];
@@ -190,37 +242,47 @@ $info = previousFullMonthInfo();
         if (details && details.length) {
           errorDetailsWrap.classList.remove('hidden');
           errorDetails.textContent = Array.isArray(details) ? details.join('\n') : String(details);
-        } else {
-          errorDetailsWrap.classList.add('hidden');
-          errorDetails.textContent = '';
         }
         errorBox.classList.remove('hidden');
       }
 
       function showSuccess(payload) {
-        const month = payload.month || '';
-        const cached = !!payload.cached;
-        const fileName = payload.filename || '';
-
-        successTitle.textContent = cached ? 'Raport gotowy (z cache).' : 'Raport wygenerowany.';
-        successText.textContent = cached
-          ? `Znaleziono istniejący raport xlsx za ${month}. Rozpoczynam pobieranie.`
-          : `Pomyślnie przygotowano raport xlsx za ${month}. Rozpoczynam pobieranie.`;
-
+        successText.textContent = `Pomyślnie przygotowano raport xlsx za ${payload.month || ''}. Rozpoczynam pobieranie.`;
         if (payload.download_url) {
           downloadLink.href = payload.download_url;
           successBox.classList.remove('hidden');
-
-          // Automatyczne pobranie
           window.location.href = payload.download_url;
-        } else {
-          successText.textContent += ' (Brak linku do pobrania.)';
-          successBox.classList.remove('hidden');
         }
       }
 
+      dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('border-blue-400', 'bg-blue-50');
+      });
+      dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('border-blue-400', 'bg-blue-50');
+      });
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('border-blue-400', 'bg-blue-50');
+        const files = e.dataTransfer.files;
+        if (files && files.length > 0) {
+          const transfer = new DataTransfer();
+          transfer.items.add(files[0]);
+          input.files = transfer.files;
+          updateUiForFile();
+        }
+      });
+      input.addEventListener('change', updateUiForFile);
+      updateUiForFile();
+
       form.addEventListener('submit', async function (e) {
         e.preventDefault();
+
+        if (!(input.files && input.files[0])) {
+          updateUiForFile();
+          return;
+        }
 
         hideAllAlerts();
         setBusy(true);
@@ -230,30 +292,19 @@ $info = previousFullMonthInfo();
         try {
           const response = await fetch(form.action, {
             method: 'POST',
-            headers: {
-              'Accept': 'application/json',
-              'X-Requested-With': 'fetch'
-            },
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'fetch' },
             body: new FormData(form)
           });
 
           const contentType = response.headers.get('content-type') || '';
-
           if (!contentType.includes('application/json')) {
             const text = await response.text();
-            throw {
-              message: 'Serwer zwrócił nieoczekiwaną odpowiedź (nie JSON).',
-              details: [text.slice(0, 4000)]
-            };
+            throw { message: 'Serwer zwrócił nieoczekiwaną odpowiedź (nie JSON).', details: [text.slice(0, 4000)] };
           }
 
           const data = await response.json();
-
           if (!response.ok || !data || data.ok !== true) {
-            throw {
-              message: (data && data.message) ? data.message : 'Nie udało się wygenerować raportu.',
-              details: (data && data.details) ? data.details : []
-            };
+            throw { message: data?.message || 'Nie udało się wygenerować raportu.', details: data?.details || [] };
           }
 
           stopLoadingTicker();
@@ -262,17 +313,13 @@ $info = previousFullMonthInfo();
         } catch (err) {
           stopLoadingTicker();
           loadingBox.classList.add('hidden');
-
-          const message = (err && err.message) ? err.message : 'Błąd połączenia z serwerem.';
-          const details = (err && err.details) ? err.details : [];
-          showError(message, details);
+          showError(err?.message || 'Błąd połączenia z serwerem.', err?.details || []);
         } finally {
           setBusy(false);
+          updateUiForFile();
         }
       });
     })();
   </script>
-
-  <script src="https://cdn.jsdelivr.net/npm/preline/dist/preline.js"></script>
 </body>
 </html>
