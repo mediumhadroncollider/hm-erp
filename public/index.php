@@ -61,7 +61,7 @@ $info = previousFullMonthInfo();
         tu będzie formularz.
       </p>
 
-      <form id="generateForm" method="post" action="generate_report.php" class="space-y-4">
+      <form id="generateForm" method="post" action="generate_month_report.php" class="space-y-4">
         <div class="flex items-center gap-3">
           <button
             id="generateBtn"

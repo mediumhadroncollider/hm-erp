@@ -15,7 +15,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  * v0.0.1-xlsx
  * Buduje finalny XLSX (tylko A:I pierwszego arkusza, bez formuł, bez dodatkowych arkuszy)
  * na bazie:
- *  - report_rows.zero_filled.json (z obecnego build_woo_month_report.php)
+ *  - report_rows.zero_filled.json (z obecnego build_month_rows_from_woo.php)
  *  - szablonu XLSX (załączony plik użytkownika)
  */
 
@@ -231,7 +231,7 @@ try {
 
     $reportJsonPath = $monthDir . DIRECTORY_SEPARATOR . 'report_rows.zero_filled.json';
     if (!is_file($reportJsonPath)) {
-        throw new RuntimeException("Brak pliku {$reportJsonPath}. Najpierw uruchom build_woo_month_report.php");
+        throw new RuntimeException("Brak pliku {$reportJsonPath}. Najpierw uruchom build_month_rows_from_woo.php");
     }
 
     fwrite(STDOUT, "Budowanie XLSX za {$month}\n");
