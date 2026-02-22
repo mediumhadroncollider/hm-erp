@@ -276,9 +276,8 @@ $requiredReports = requiredReportsDefinitions();
       }
 
       function findFirstNonEmptyLine(text) {
-        const lines = String(text || '').split(/
-|
-|/);
+        const lines = String(text || '').split(/\r\n|\n|\r/);
+/);
         for (const line of lines) {
           if (line.trim() !== '') {
             return line;
