@@ -7,6 +7,7 @@ date_default_timezone_set('Europe/Warsaw');
 require __DIR__ . '/../bin/_common.php';
 require __DIR__ . '/../bin/_virtualo.php';
 require __DIR__ . '/../bin/_empik.php';
+require __DIR__ . '/../bin/_publio.php';
 require __DIR__ . '/_web_common.php';
 
 try {
@@ -240,6 +241,14 @@ try {
                 . ' --month=' . escapeshellarg($month)
                 . ' --input=' . escapeshellarg((string)$uploadedReportPaths['empik_report']['path'])
                 . ' --original-name=' . escapeshellarg((string)$uploadedReportPaths['empik_report']['name']),
+        ],
+        [
+            'label' => 'Walidacja i parsowanie raportu Publio',
+            'cmd' => escapeshellarg($phpCli)
+                . ' ' . escapeshellarg($root . '/bin/ingest_publio_report_month.php')
+                . ' --month=' . escapeshellarg($month)
+                . ' --input=' . escapeshellarg((string)$uploadedReportPaths['publio_report']['path'])
+                . ' --original-name=' . escapeshellarg((string)$uploadedReportPaths['publio_report']['name']),
         ],
         [
             'label' => 'Budowa pliku XLSX',

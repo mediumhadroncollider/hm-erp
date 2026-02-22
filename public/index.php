@@ -84,7 +84,7 @@ $requiredReports = requiredReportsDefinitions();
               <input id="reportsInput" name="report_files[]" type="file" multiple accept=".csv,text/csv" class="hidden">
             </label>
           </div>
-          <p class="mt-2 text-xs text-slate-500">Dozwolone: raporty wymagane przez backend (obecnie: CSV Virtualo).</p>
+          <p class="mt-2 text-xs text-slate-500">Dozwolone: raporty wymagane przez backend (CSV).</p>
         </div>
 
         <div class="rounded-xl border border-slate-200 bg-white p-4">
@@ -174,6 +174,8 @@ $requiredReports = requiredReportsDefinitions();
         'Pobieranie katalogu produktów z WooCommerce…',
         'Pobieranie zamówień za poprzedni miesiąc…',
         'Parsowanie raportu Virtualo…',
+        'Parsowanie raportu Empik…',
+        'Parsowanie raportu Publio…',
         'Budowa raportu i przygotowanie pliku xlsx…'
       ];
 
@@ -194,6 +196,11 @@ $requiredReports = requiredReportsDefinitions();
           ['prog rozliczeniowy'],
           ['ilosc'],
           ['wynagrodzenie wyd. netto']
+        ],
+        publio: [
+          ['isbn/issn/ismn'],
+          ['liczba sprzedanych egzemplarzy'],
+          ['kwota dla wydawcy netto']
         ]
       };
 
@@ -315,12 +322,17 @@ $requiredReports = requiredReportsDefinitions();
         if (signatureMatches(headerSet, reportSignatures.empik)) {
           matches.push('empik');
         }
+        if (signatureMatches(headerSet, reportSignatures.publio)) {
+          matches.push('publio');
+        }
 
         if (matches.length === 1) {
           const kind = matches[0];
           return {
             kind,
-            message: kind === 'virtualo' ? '✅ rozpoznano jako Virtualo' : '✅ rozpoznano jako Empik'
+            message: kind === 'virtualo'
+              ? '✅ rozpoznano jako Virtualo'
+              : (kind === 'empik' ? '✅ rozpoznano jako Empik' : '✅ rozpoznano jako Publio')
           };
         }
         if (matches.length > 1) {
