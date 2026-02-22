@@ -338,9 +338,13 @@ try {
         $r++;
     }
 
-    // Wiersz sumaryczny na końcu raportu (jak w szablonie: sprzedaż i przychody)
-    $summaryRow = $r;
-    $sheet->setCellValueExplicit("B{$summaryRow}", 'SUMA', DataType::TYPE_STRING);
+    // Pusty wiersz oddzielający listę od sumy
+    $blankRow = $r;
+
+    // Wiersz sumaryczny po pustym wierszu
+    $summaryRow = $blankRow + 1;
+
+    $sheet->setCellValueExplicit("B{$summaryRow}", 'razem:', DataType::TYPE_STRING);
     $sheet->setCellValue("C{$summaryRow}", null);
     $sheet->setCellValue("D{$summaryRow}", null);
     $sheet->setCellValue("G{$summaryRow}", null);

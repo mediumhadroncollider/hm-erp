@@ -38,18 +38,6 @@ try {
     $xlsxPath = monthReportXlsxPath($paths, $month);
     $filename = monthReportXlsxFilename($month);
 
-    // CACHE: jeśli plik już istnieje, nie przeliczamy
-    if (is_file($xlsxPath) && filesize($xlsxPath) > 0) {
-        jsonResponse(200, [
-            'ok' => true,
-            'cached' => true,
-            'month' => $month,
-            'filename' => $filename,
-            'download_url' => 'download_month_report_xlsx.php?month=' . rawurlencode($month),
-            'message' => 'Użyto istniejącego raportu XLSX.',
-        ]);
-    }
-
     $phpCli = null;
     if (isset($config['runtime']) && is_array($config['runtime']) && isset($config['runtime']['php_cli_bin'])) {
         $phpCli = (string)$config['runtime']['php_cli_bin'];
