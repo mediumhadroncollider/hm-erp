@@ -1,5 +1,10 @@
 {
     "require": {
+        "ext-mbstring": "*",
+        "ext-xml": "*",
+        "ext-zip": "*",
+        "ext-gd": "*",
+        "ext-iconv": "*",
         "phpoffice/phpspreadsheet": "^5.4"
     }
 }
