@@ -40,8 +40,9 @@ try {
         throw new RuntimeException('Brak paths.periods_dir w config.local.php');
     }
 
-    $monthDir = rtrim($periodsDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $month . DIRECTORY_SEPARATOR . 'woo';
-    ensureDir($monthDir);
+    $monthDir = rtrim($periodsDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $month;
+    $virtualoDir = $monthDir . DIRECTORY_SEPARATOR . 'virtualo';
+    ensureDir($virtualoDir);
 
     fwrite(STDOUT, "Walidacja i parsowanie raportu Virtualo za {$month}\n");
     fwrite(STDOUT, "Wejście: {$inputPath}\n\n");
@@ -55,7 +56,7 @@ try {
 
     $data = is_array($result['data'] ?? null) ? $result['data'] : [];
 
-    $outPath = $monthDir . DIRECTORY_SEPARATOR . 'virtualo_sales_by_isbn.json';
+    $outPath = $virtualoDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
     writeJsonFile($outPath, [
         'snapshot_type' => 'virtualo_sales_by_isbn',
         'generated_at' => gmdate('c'),
@@ -70,6 +71,18 @@ try {
             'unique_isbn' => count((array)($data['records'] ?? [])),
         ],
         'records' => array_values((array)($data['records'] ?? [])),
+    ]);
+
+
+    $manifestPath = $virtualoDir . DIRECTORY_SEPARATOR . 'manifest.json';
+    writeJsonFile($manifestPath, [
+        'snapshot_type' => 'virtualo_manifest',
+        'generated_at' => gmdate('c'),
+        'month' => $month,
+        'source' => 'virtualo',
+        'input_file' => $inputPath,
+        'input_original_name' => $inputOriginalName,
+        'output_sales_by_isbn' => $outPath,
     ]);
 
     fwrite(STDOUT, "✅ Gotowe\n");

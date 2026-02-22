@@ -169,11 +169,13 @@ try {
         throw new RuntimeException("Brak szablonu XLSX: {$templatePath}");
     }
 
-    $monthDir = rtrim($periodsDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $month . DIRECTORY_SEPARATOR . 'woo';
+    $monthRootDir = rtrim($periodsDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $month;
+    $monthDir = $monthRootDir . DIRECTORY_SEPARATOR . 'woo';
+    $virtualoDir = $monthRootDir . DIRECTORY_SEPARATOR . 'virtualo';
     ensureDir($monthDir);
 
     $reportJsonPath = $monthDir . DIRECTORY_SEPARATOR . 'report_rows.zero_filled.json';
-    $virtualoJsonPath = $monthDir . DIRECTORY_SEPARATOR . 'virtualo_sales_by_isbn.json';
+    $virtualoJsonPath = $virtualoDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
     if (!is_file($reportJsonPath) || !is_file($virtualoJsonPath)) {
         throw new RuntimeException('Brak danych wejściowych Woo i/lub Virtualo.');
     }
@@ -202,14 +204,14 @@ try {
     $templateOrder = readTemplateIsbnOrder($sheet);
     $finalRows = buildFinalRows($templateOrder, $rowsByIsbn, $month);
 
-    $targetLastRow = max(4, 4 + count($finalRows));
+    $targetLastRow = max(4, 4 + count($finalRows) + 2);
     cloneDataRowStyleIfNeeded($sheet, $targetLastRow);
     clearDataArea($sheet, 4, max($sheet->getHighestRow(), $targetLastRow));
 
     $sheet->setCellValue('B1', 'Tytuł');
     $sheet->setCellValue('E1', 'RAZEM');
     $sheet->setCellValue('H1', 'Histmag (szacunkowy)');
-    $sheet->setCellValue('K1', 'sieci');
+    $sheet->setCellValue('K1', 'sieci zewnętrzne (suma)');
     $sheet->setCellValue('N1', 'Virtualo');
     $sheet->setCellValue('H2', 'kwoty są szacunkowe');
 
@@ -235,20 +237,23 @@ try {
         $virtUnits = (int)$virtualo['units_sold'];
         $virtNet = ((int)$virtualo['margin_net_cents']) / 100;
 
-        $networkUnits = $virtUnits;
-        $networkNet = $virtNet;
+        // Wariant A: K:L to suma zewnętrznych sieci dystrybucji (na tym etapie tylko Virtualo).
+        // N:O pozostają sekcją szczegółową dla Virtualo, więc wartości są świadomie spójne/dublowane.
+        $externalNetworkUnits = $virtUnits;
+        $externalNetworkNet = $virtNet;
 
         $sheet->setCellValueExplicit("A{$r}", $isbnNorm, DataType::TYPE_STRING);
         $sheet->setCellValueExplicit("B{$r}", $title, DataType::TYPE_STRING);
 
-        $sheet->setCellValue("E{$r}", $histUnits + $networkUnits);
-        $sheet->setCellValue("F{$r}", $histNet + $networkNet);
+        // E:F = łącznie Histmag + suma sieci zewnętrznych.
+        $sheet->setCellValue("E{$r}", $histUnits + $externalNetworkUnits);
+        $sheet->setCellValue("F{$r}", $histNet + $externalNetworkNet);
 
         $sheet->setCellValue("H{$r}", $histUnits);
         $sheet->setCellValue("I{$r}", $histNet);
 
-        $sheet->setCellValue("K{$r}", $networkUnits);
-        $sheet->setCellValue("L{$r}", $networkNet);
+        $sheet->setCellValue("K{$r}", $externalNetworkUnits);
+        $sheet->setCellValue("L{$r}", $externalNetworkNet);
 
         $sheet->setCellValue("N{$r}", $virtUnits);
         $sheet->setCellValue("O{$r}", $virtNet);
@@ -257,8 +262,8 @@ try {
         $sumHistNet += $histNet;
         $sumVirtUnits += $virtUnits;
         $sumVirtNet += $virtNet;
-        $totalUnits += ($histUnits + $networkUnits);
-        $totalNet += ($histNet + $networkNet);
+        $totalUnits += ($histUnits + $externalNetworkUnits);
+        $totalNet += ($histNet + $externalNetworkNet);
 
         $r++;
     }
