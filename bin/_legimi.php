@@ -95,7 +95,8 @@ function validateAndParseLegimiXlsx(string $filePath, ?string $originalFilename 
     for ($row = 1; $row <= $highestRow; $row++) {
         $currentHeaders = [];
         for ($col = 1; $col <= $highestColumnIndex; $col++) {
-            $cell = $sheet->getCellByColumnAndRow($col, $row);
+            $cellRef = Coordinate::stringFromColumnIndex($col) . (string)$row;
+            $cell = $sheet->getCell($cellRef);
             $raw = scalarToTrimmedString($cell->getCalculatedValue());
             if ($raw === null || $raw === '') {
                 continue;
@@ -164,7 +165,8 @@ function validateAndParseLegimiXlsx(string $filePath, ?string $originalFilename 
 
         $rowValues = [];
         for ($col = 1; $col <= $highestColumnIndex; $col++) {
-            $rowValues[$col] = scalarToTrimmedString($sheet->getCellByColumnAndRow($col, $row)->getCalculatedValue()) ?? '';
+            $cellRef = Coordinate::stringFromColumnIndex($col) . (string)$row;
+            $rowValues[$col] = scalarToTrimmedString($sheet->getCell($cellRef)->getCalculatedValue()) ?? '';
         }
 
         $joined = trim(implode('', $rowValues));
