@@ -120,6 +120,15 @@ function detectNextoTableHeaders(Worksheet $sheet, int $maxRowsToScan = 200): ar
         }
 
         $columns = mapNextoHeaderColumns($headerCells);
+
+        // W raportach Nexto kwota używana do eksportu jest w kolumnie P.
+        // Jeśli w tym wierszu nagłówka kolumna P wygląda na "netto",
+        // wymuszamy ją jako źródło wartości margin_net_cents.
+        $nextoNetColumn = Coordinate::columnIndexFromString('P');
+        $nextoNetHeaderNorm = normalizeNextoText((string)($headerCells[$nextoNetColumn] ?? ''));
+        if ($nextoNetHeaderNorm !== '' && str_contains($nextoNetHeaderNorm, 'netto')) {
+            $columns['net'] = $nextoNetColumn;
+        }
         $hasRequired = isset($columns['isbn'], $columns['units'], $columns['net']);
         if (!$hasRequired) {
             continue;
