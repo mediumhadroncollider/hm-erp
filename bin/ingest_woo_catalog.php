@@ -9,9 +9,9 @@ declare(strict_types=1);
  *  - snapshot znormalizowany JSON (ISBN, data premiery, warningi)
  *
  * Uruchom:
- *   php8.4 bin/fetch_woo_catalog.php
+ *   php8.4 bin/ingest_woo_catalog.php
  * albo (jeśli php wskazuje już na 8.x):
- *   php bin/fetch_woo_catalog.php
+ *   php bin/ingest_woo_catalog.php
  */
 
 $config = require __DIR__ . '/../config.local.php';

@@ -31,7 +31,7 @@ try {
 
     $orderLinesPath = $monthDir . DIRECTORY_SEPARATOR . 'order_lines.normalized.json';
     if (!file_exists($orderLinesPath)) {
-        throw new RuntimeException("Brak pliku {$orderLinesPath}. Najpierw uruchom fetch_woo_orders_month.php");
+        throw new RuntimeException("Brak pliku {$orderLinesPath}. Najpierw uruchom ingest_woo_orders_month.php");
     }
 
     fwrite(STDOUT, "Budowanie raportu Woo za {$month}\n");
