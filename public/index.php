@@ -282,19 +282,9 @@ $requiredReports = requiredReportsDefinitions();
           .split('\n');
       }
 
-      function findFirstNonEmptyLine(text) {
-        const lines = splitLinesUniversal(text);
-        const lines = splitLinesUniversal(text);
-        for (const line of lines) {
-          if (line.trim() !== '') {
-            return line;
-          }
-        }
-        return '';
-      }
 
-      function decodeBuffer(buffer) {
-        const decoders = [];
+        const csvLines = splitLinesUniversal(text);
+          for (const line of csvLines) {
         try {
           decoders.push(new TextDecoder('utf-8', { fatal: true }));
         } catch (_) {
