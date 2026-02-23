@@ -275,11 +275,12 @@ $requiredReports = requiredReportsDefinitions();
         return semicolons >= commas ? ';' : ',';
       }
 
-      function splitLinesUniversal(text) {
-        return String(text || '')
-          .replaceAll('\r\n', '\n')
-          .replaceAll('\r', '\n')
-          .split('\n');
+      function splitLinesUniversal(inputText = '') {
+        const normalized = String(inputText)
+          .split('\r\n').join('\n')
+          .split('\r').join('\n');
+
+        return normalized.split('\n');
       }
 
 
@@ -557,8 +558,8 @@ $requiredReports = requiredReportsDefinitions();
           input.files = transfer.files;
           updateUiForFile();
         }
-      });
-      input.addEventListener('change', updateUiForFile);
+            const rawResponseText = await response.text();
+            throw { message: 'Serwer zwrócił nieoczekiwaną odpowiedź (nie JSON).', details: [rawResponseText.slice(0, 4000)] };
       updateUiForFile();
 
       form.addEventListener('submit', async function (e) {
