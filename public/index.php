@@ -275,9 +275,16 @@ $requiredReports = requiredReportsDefinitions();
         return semicolons >= commas ? ';' : ',';
       }
 
+      function splitLinesUniversal(text) {
+        return String(text || '')
+          .replaceAll('\r\n', '\n')
+          .replaceAll('\r', '\n')
+          .split('\n');
+      }
+
       function findFirstNonEmptyLine(text) {
-        const lines = String(text || '').split(/\r\n|\n|\r/);
-/);
+        const lines = splitLinesUniversal(text);
+        const lines = splitLinesUniversal(text);
         for (const line of lines) {
           if (line.trim() !== '') {
             return line;
