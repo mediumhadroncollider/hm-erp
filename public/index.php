@@ -179,6 +179,8 @@ $requiredReports = requiredReportsDefinitions();
         'Parsowanie raportu Legimi…',
         'Parsowanie raportu Nexto…',
         'Parsowanie raportu Woblink…',
+        'Parsowanie raportu ebookpoint…',
+        'Parsowanie raportu nasbi…',
         'Budowa raportu i przygotowanie pliku xlsx…'
       ];
 
@@ -204,6 +206,22 @@ $requiredReports = requiredReportsDefinitions();
           ['isbn/issn/ismn'],
           ['liczba sprzedanych egzemplarzy'],
           ['kwota dla wydawcy netto']
+        ],
+        ebookpoint: [
+          ['id'],
+          ['tytul'],
+          ['isbn'],
+          ['liczba'],
+          ['wartosc netto'],
+          ['prowizja ebookpoint.pl']
+        ],
+        nasbi: [
+          ['id'],
+          ['tytul'],
+          ['isbn'],
+          ['liczba'],
+          ['wartosc netto'],
+          ['prowizja ebookpoint biblio']
         ]
       };
 
@@ -328,14 +346,25 @@ $requiredReports = requiredReportsDefinitions();
         if (signatureMatches(headerSet, reportSignatures.publio)) {
           matches.push('publio');
         }
+        if (signatureMatches(headerSet, reportSignatures.ebookpoint)) {
+          matches.push('ebookpoint');
+        }
+        if (signatureMatches(headerSet, reportSignatures.nasbi)) {
+          matches.push('nasbi');
+        }
 
         if (matches.length === 1) {
           const kind = matches[0];
+          const labels = {
+            virtualo: 'Virtualo',
+            empik: 'Empik',
+            publio: 'Publio',
+            ebookpoint: 'ebookpoint',
+            nasbi: 'nasbi'
+          };
           return {
             kind,
-            message: kind === 'virtualo'
-              ? '✅ rozpoznano jako Virtualo'
-              : (kind === 'empik' ? '✅ rozpoznano jako Empik' : '✅ rozpoznano jako Publio')
+            message: `✅ rozpoznano jako ${labels[kind] || kind}`
           };
         }
         if (matches.length > 1) {

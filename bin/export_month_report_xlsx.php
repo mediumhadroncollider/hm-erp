@@ -11,7 +11,7 @@ use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-const REPORT_LAST_COLUMN = 'AD';
+const REPORT_LAST_COLUMN = 'AV';
 
 function normalizeIsbnForKey($value): ?string
 {
@@ -181,6 +181,8 @@ try {
     $legimiDir = $monthRootDir . DIRECTORY_SEPARATOR . 'legimi';
     $nextoDir = $monthRootDir . DIRECTORY_SEPARATOR . 'nexto';
     $woblinkDir = $monthRootDir . DIRECTORY_SEPARATOR . 'woblink';
+    $ebookpointDir = $monthRootDir . DIRECTORY_SEPARATOR . 'ebookpoint';
+    $nasbiDir = $monthRootDir . DIRECTORY_SEPARATOR . 'nasbi';
     ensureDir($monthDir);
 
     $reportJsonPath = $monthDir . DIRECTORY_SEPARATOR . 'report_rows.zero_filled.json';
@@ -190,8 +192,11 @@ try {
     $legimiJsonPath = $legimiDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
     $nextoJsonPath = $nextoDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
     $woblinkJsonPath = $woblinkDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
-    if (!is_file($reportJsonPath) || !is_file($virtualoJsonPath) || !is_file($empikJsonPath) || !is_file($publioJsonPath) || !is_file($legimiJsonPath) || !is_file($nextoJsonPath)) {
-        throw new RuntimeException('Brak danych wejściowych Woo i/lub Virtualo i/lub Empik i/lub Publio i/lub Legimi i/lub Nexto.');
+    $ebookpointJsonPath = $ebookpointDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
+    $nasbiJsonPath = $nasbiDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
+
+    if (!is_file($reportJsonPath) || !is_file($virtualoJsonPath) || !is_file($empikJsonPath) || !is_file($publioJsonPath) || !is_file($legimiJsonPath) || !is_file($nextoJsonPath) || !is_file($woblinkJsonPath) || !is_file($ebookpointJsonPath) || !is_file($nasbiJsonPath)) {
+        throw new RuntimeException('Brak danych wejściowych Woo i/lub źródeł obsługiwanych (Virtualo/Empik/Publio/Legimi/Nexto/Woblink/Ebookpoint/Nasbi).');
     }
 
     $reportPayload = readJsonFile($reportJsonPath);
@@ -201,6 +206,8 @@ try {
     $legimiPayload = readJsonFile($legimiJsonPath);
     $nextoPayload = readJsonFile($nextoJsonPath);
     $woblinkPayload = readJsonFile($woblinkJsonPath);
+    $ebookpointPayload = readJsonFile($ebookpointJsonPath);
+    $nasbiPayload = readJsonFile($nasbiJsonPath);
     $reportRows = is_array($reportPayload['records'] ?? null) ? $reportPayload['records'] : [];
     $virtualoRows = is_array($virtualoPayload['records'] ?? null) ? $virtualoPayload['records'] : [];
     $empikRows = is_array($empikPayload['records'] ?? null) ? $empikPayload['records'] : [];
@@ -208,6 +215,8 @@ try {
     $legimiRows = is_array($legimiPayload['records'] ?? null) ? $legimiPayload['records'] : [];
     $nextoRows = is_array($nextoPayload['records'] ?? null) ? $nextoPayload['records'] : [];
     $woblinkRows = is_array($woblinkPayload['records'] ?? null) ? $woblinkPayload['records'] : [];
+    $ebookpointRows = is_array($ebookpointPayload['records'] ?? null) ? $ebookpointPayload['records'] : [];
+    $nasbiRows = is_array($nasbiPayload['records'] ?? null) ? $nasbiPayload['records'] : [];
 
     $rowsByIsbn = indexReportRowsByIsbn($reportRows);
     $virtualoByIsbn = indexExternalSourceByIsbn($virtualoRows);
@@ -216,6 +225,8 @@ try {
     $legimiByIsbn = indexExternalSourceByIsbn($legimiRows);
     $nextoByIsbn = indexExternalSourceByIsbn($nextoRows);
     $woblinkByIsbn = indexExternalSourceByIsbn($woblinkRows);
+    $ebookpointByIsbn = indexExternalSourceByIsbn($ebookpointRows);
+    $nasbiByIsbn = indexExternalSourceByIsbn($nasbiRows);
 
     $spreadsheet = IOFactory::load($templatePath);
     while ($spreadsheet->getSheetCount() > 1) {
@@ -249,6 +260,12 @@ try {
     $sheet->setCellValue('W1', 'Legimi');
     $sheet->setCellValue('Z1', 'Nexto');
     $sheet->setCellValue('AC1', 'Woblink');
+    $sheet->setCellValue('AF1', 'Azymut');
+    $sheet->setCellValue('AI1', 'Ebookpoint');
+    $sheet->setCellValue('AL1', 'Nasbi');
+    $sheet->setCellValue('AO1', 'Storytel');
+    $sheet->setCellValue('AR1', 'Audioteka');
+    $sheet->setCellValue('AU1', 'Bookbeat');
     $sheet->setCellValue('H2', 'kwoty są szacunkowe');
 
     $r = 4;
@@ -270,6 +287,18 @@ try {
     $sumNextoNet = 0.0;
     $sumWoblinkUnits = 0;
     $sumWoblinkNet = 0.0;
+    $sumAzymutUnits = 0;
+    $sumAzymutNet = 0.0;
+    $sumEbookpointUnits = 0;
+    $sumEbookpointNet = 0.0;
+    $sumNasbiUnits = 0;
+    $sumNasbiNet = 0.0;
+    $sumStorytelUnits = 0;
+    $sumStorytelNet = 0.0;
+    $sumAudiotekaUnits = 0;
+    $sumAudiotekaNet = 0.0;
+    $sumBookbeatUnits = 0;
+    $sumBookbeatNet = 0.0;
 
     foreach ($finalRows as $row) {
         $isbnNorm = normalizeIsbnForKey($row['isbn_norm'] ?? null);
@@ -305,8 +334,25 @@ try {
         $woblinkUnits = (int)$woblink['units_sold'];
         $woblinkNet = ((int)$woblink['margin_net_cents']) / 100;
 
-        $externalNetworkUnits = $virtUnits + $empikUnits + $publioUnits + $legimiUnits + $nextoUnits + $woblinkUnits;
-        $externalNetworkNet = $virtNet + $empikNet + $publioNet + $legimiNet + $nextoNet + $woblinkNet;
+        $ebookpoint = $ebookpointByIsbn[$isbnNorm] ?? ['units_sold' => 0, 'margin_net_cents' => 0];
+        $ebookpointUnits = (int)$ebookpoint['units_sold'];
+        $ebookpointNet = ((int)$ebookpoint['margin_net_cents']) / 100;
+
+        $nasbi = $nasbiByIsbn[$isbnNorm] ?? ['units_sold' => 0, 'margin_net_cents' => 0];
+        $nasbiUnits = (int)$nasbi['units_sold'];
+        $nasbiNet = ((int)$nasbi['margin_net_cents']) / 100;
+
+        $azymutUnits = 0;
+        $azymutNet = 0.0;
+        $storytelUnits = 0;
+        $storytelNet = 0.0;
+        $audiotekaUnits = 0;
+        $audiotekaNet = 0.0;
+        $bookbeatUnits = 0;
+        $bookbeatNet = 0.0;
+
+        $externalNetworkUnits = $virtUnits + $empikUnits + $publioUnits + $legimiUnits + $nextoUnits + $woblinkUnits + $azymutUnits + $ebookpointUnits + $nasbiUnits + $storytelUnits + $audiotekaUnits + $bookbeatUnits;
+        $externalNetworkNet = $virtNet + $empikNet + $publioNet + $legimiNet + $nextoNet + $woblinkNet + $azymutNet + $ebookpointNet + $nasbiNet + $storytelNet + $audiotekaNet + $bookbeatNet;
 
         $sheet->setCellValueExplicit("A{$r}", $isbnNorm, DataType::TYPE_STRING);
         $sheet->setCellValueExplicit("B{$r}", $title, DataType::TYPE_STRING);
@@ -338,6 +384,24 @@ try {
         $sheet->setCellValue("AC{$r}", $woblinkUnits);
         $sheet->setCellValue("AD{$r}", $woblinkNet);
 
+        $sheet->setCellValue("AF{$r}", $azymutUnits);
+        $sheet->setCellValue("AG{$r}", $azymutNet);
+
+        $sheet->setCellValue("AI{$r}", $ebookpointUnits);
+        $sheet->setCellValue("AJ{$r}", $ebookpointNet);
+
+        $sheet->setCellValue("AL{$r}", $nasbiUnits);
+        $sheet->setCellValue("AM{$r}", $nasbiNet);
+
+        $sheet->setCellValue("AO{$r}", $storytelUnits);
+        $sheet->setCellValue("AP{$r}", $storytelNet);
+
+        $sheet->setCellValue("AR{$r}", $audiotekaUnits);
+        $sheet->setCellValue("AS{$r}", $audiotekaNet);
+
+        $sheet->setCellValue("AU{$r}", $bookbeatUnits);
+        $sheet->setCellValue("AV{$r}", $bookbeatNet);
+
         $sumHistUnits += $histUnits;
         $sumHistNet += $histNet;
         $sumVirtUnits += $virtUnits;
@@ -354,6 +418,18 @@ try {
         $sumNextoNet += $nextoNet;
         $sumWoblinkUnits += $woblinkUnits;
         $sumWoblinkNet += $woblinkNet;
+        $sumAzymutUnits += $azymutUnits;
+        $sumAzymutNet += $azymutNet;
+        $sumEbookpointUnits += $ebookpointUnits;
+        $sumEbookpointNet += $ebookpointNet;
+        $sumNasbiUnits += $nasbiUnits;
+        $sumNasbiNet += $nasbiNet;
+        $sumStorytelUnits += $storytelUnits;
+        $sumStorytelNet += $storytelNet;
+        $sumAudiotekaUnits += $audiotekaUnits;
+        $sumAudiotekaNet += $audiotekaNet;
+        $sumBookbeatUnits += $bookbeatUnits;
+        $sumBookbeatNet += $bookbeatNet;
         $totalUnits += ($histUnits + $externalNetworkUnits);
         $totalNet += ($histNet + $externalNetworkNet);
 
@@ -380,6 +456,18 @@ try {
     $sheet->setCellValue("AA{$summaryRow}", $sumNextoNet);
     $sheet->setCellValue("AC{$summaryRow}", $sumWoblinkUnits);
     $sheet->setCellValue("AD{$summaryRow}", $sumWoblinkNet);
+    $sheet->setCellValue("AF{$summaryRow}", $sumAzymutUnits);
+    $sheet->setCellValue("AG{$summaryRow}", $sumAzymutNet);
+    $sheet->setCellValue("AI{$summaryRow}", $sumEbookpointUnits);
+    $sheet->setCellValue("AJ{$summaryRow}", $sumEbookpointNet);
+    $sheet->setCellValue("AL{$summaryRow}", $sumNasbiUnits);
+    $sheet->setCellValue("AM{$summaryRow}", $sumNasbiNet);
+    $sheet->setCellValue("AO{$summaryRow}", $sumStorytelUnits);
+    $sheet->setCellValue("AP{$summaryRow}", $sumStorytelNet);
+    $sheet->setCellValue("AR{$summaryRow}", $sumAudiotekaUnits);
+    $sheet->setCellValue("AS{$summaryRow}", $sumAudiotekaNet);
+    $sheet->setCellValue("AU{$summaryRow}", $sumBookbeatUnits);
+    $sheet->setCellValue("AV{$summaryRow}", $sumBookbeatNet);
     $xlsxPath = $monthDir . DIRECTORY_SEPARATOR . 'raport_sprzedazy_' . $month . '.xlsx';
     IOFactory::createWriter($spreadsheet, 'Xlsx')->save($xlsxPath);
 
@@ -395,6 +483,8 @@ try {
         'input_legimi_json' => $legimiJsonPath,
         'input_nexto_json' => $nextoJsonPath,
         'input_woblink_json' => $woblinkJsonPath,
+        'input_ebookpoint_json' => $ebookpointJsonPath,
+        'input_nasbi_json' => $nasbiJsonPath,
         'output_xlsx' => $xlsxPath,
         'columns_kept' => 'A:' . REPORT_LAST_COLUMN,
         'formulas_in_output' => false,
