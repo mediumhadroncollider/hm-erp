@@ -536,34 +536,35 @@ $requiredReports = requiredReportsDefinitions();
         successText.textContent = `Pomyślnie przygotowano raport xlsx za ${payload.month || ''}. Rozpoczynam pobieranie.`;
         if (payload.download_url) {
           downloadLink.href = payload.download_url;
-          successBox.classList.remove('hidden');
-          window.location.href = payload.download_url;
-        }
-      }
-
-      dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZone.classList.add('border-blue-400', 'bg-blue-50');
-      });
-      dropZone.addEventListener('dragleave', () => {
-        dropZone.classList.remove('border-blue-400', 'bg-blue-50');
-      });
-      dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropZone.classList.remove('border-blue-400', 'bg-blue-50');
-        const files = e.dataTransfer.files;
-        if (files && files.length > 0) {
-          const transfer = new DataTransfer();
-          Array.from(files).forEach((file) => transfer.items.add(file));
-          input.files = transfer.files;
-          updateUiForFile();
-        }
-            const rawResponseText = await response.text();
-            throw { message: 'Serwer zwrócił nieoczekiwaną odpowiedź (nie JSON).', details: [rawResponseText.slice(0, 4000)] };
-      updateUiForFile();
-
-      form.addEventListener('submit', async function (e) {
-        e.preventDefault();
+      form.addEventListener('submit', function (e) {
+        fetch(form.action, {
+          method: 'POST',
+          headers: { 'Accept': 'application/json', 'X-Requested-With': 'fetch' },
+          body: new FormData(form)
+        })
+          .then(async (response) => {
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+              const rawResponseText = await response.text();
+              throw { message: 'Serwer zwrócił nieoczekiwaną odpowiedź (nie JSON).', details: [rawResponseText.slice(0, 4000)] };
+            }
+            const data = await response.json();
+            if (!response.ok || !data || data.ok !== true) {
+              throw { message: data?.message || 'Nie udało się wygenerować raportu.', details: data?.details || [] };
+            }
+            stopLoadingTicker();
+            loadingBox.classList.add('hidden');
+            showSuccess(data);
+          })
+          .catch((err) => {
+            stopLoadingTicker();
+            loadingBox.classList.add('hidden');
+            showError(err?.message || 'Błąd połączenia z serwerem.', err?.details || []);
+          })
+          .finally(() => {
+            setBusy(false);
+            updateUiForFile();
+          });
 
         if (!(input.files && input.files.length > 0)) {
           updateUiForFile();
