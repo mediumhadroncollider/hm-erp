@@ -245,8 +245,8 @@ try {
     $sheet->setCellValue('K1', 'sieci zewnętrzne (suma)');
     $sheet->setCellValue('N1', 'Virtualo');
     $sheet->setCellValue('Q1', 'Empik');
-    $sheet->setCellValue('T1', 'Publio');
-    $sheet->setCellValue('W1', 'Legimi');
+    $sheet->setCellValue('T1', 'Legimi');
+    $sheet->setCellValue('W1', 'Publio');
     $sheet->setCellValue('Z1', 'Nexto');
     $sheet->setCellValue('AC1', 'Woblink');
     $sheet->setCellValue('H2', 'kwoty są szacunkowe');
@@ -326,11 +326,11 @@ try {
         $sheet->setCellValue("Q{$r}", $empikUnits);
         $sheet->setCellValue("R{$r}", $empikNet);
 
-        $sheet->setCellValue("T{$r}", $publioUnits);
-        $sheet->setCellValue("U{$r}", $publioNet);
+        $sheet->setCellValue("T{$r}", $legimiUnits);
+        $sheet->setCellValue("U{$r}", $legimiNet);
 
-        $sheet->setCellValue("W{$r}", $legimiUnits);
-        $sheet->setCellValue("X{$r}", $legimiNet);
+        $sheet->setCellValue("W{$r}", $publioUnits);
+        $sheet->setCellValue("X{$r}", $publioNet);
 
         $sheet->setCellValue("Z{$r}", $nextoUnits);
         $sheet->setCellValue("AA{$r}", $nextoNet);
@@ -372,10 +372,10 @@ try {
     $sheet->setCellValue("O{$summaryRow}", $sumVirtNet);
     $sheet->setCellValue("Q{$summaryRow}", $sumEmpikUnits);
     $sheet->setCellValue("R{$summaryRow}", $sumEmpikNet);
-    $sheet->setCellValue("T{$summaryRow}", $sumPublioUnits);
-    $sheet->setCellValue("U{$summaryRow}", $sumPublioNet);
-    $sheet->setCellValue("W{$summaryRow}", $sumLegimiUnits);
-    $sheet->setCellValue("X{$summaryRow}", $sumLegimiNet);
+    $sheet->setCellValue("T{$summaryRow}", $sumLegimiUnits);
+    $sheet->setCellValue("U{$summaryRow}", $sumLegimiNet);
+    $sheet->setCellValue("W{$summaryRow}", $sumPublioUnits);
+    $sheet->setCellValue("X{$summaryRow}", $sumPublioNet);
     $sheet->setCellValue("Z{$summaryRow}", $sumNextoUnits);
     $sheet->setCellValue("AA{$summaryRow}", $sumNextoNet);
     $sheet->setCellValue("AC{$summaryRow}", $sumWoblinkUnits);
