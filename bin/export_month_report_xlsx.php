@@ -181,6 +181,7 @@ try {
     $legimiDir = $monthRootDir . DIRECTORY_SEPARATOR . 'legimi';
     $nextoDir = $monthRootDir . DIRECTORY_SEPARATOR . 'nexto';
     $woblinkDir = $monthRootDir . DIRECTORY_SEPARATOR . 'woblink';
+    $azymutDir = $monthRootDir . DIRECTORY_SEPARATOR . 'azymut';
     $ebookpointDir = $monthRootDir . DIRECTORY_SEPARATOR . 'ebookpoint';
     $nasbiDir = $monthRootDir . DIRECTORY_SEPARATOR . 'nasbi';
     ensureDir($monthDir);
@@ -192,6 +193,7 @@ try {
     $legimiJsonPath = $legimiDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
     $nextoJsonPath = $nextoDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
     $woblinkJsonPath = $woblinkDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
+    $azymutJsonPath = $azymutDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
     $ebookpointJsonPath = $ebookpointDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
     $nasbiJsonPath = $nasbiDir . DIRECTORY_SEPARATOR . 'sales_by_isbn.json';
 
@@ -206,6 +208,7 @@ try {
     $legimiPayload = readJsonFile($legimiJsonPath);
     $nextoPayload = readJsonFile($nextoJsonPath);
     $woblinkPayload = readJsonFile($woblinkJsonPath);
+    $azymutPayload = is_file($azymutJsonPath) ? readJsonFile($azymutJsonPath) : [];
     $ebookpointPayload = readJsonFile($ebookpointJsonPath);
     $nasbiPayload = readJsonFile($nasbiJsonPath);
     $reportRows = is_array($reportPayload['records'] ?? null) ? $reportPayload['records'] : [];
@@ -215,6 +218,7 @@ try {
     $legimiRows = is_array($legimiPayload['records'] ?? null) ? $legimiPayload['records'] : [];
     $nextoRows = is_array($nextoPayload['records'] ?? null) ? $nextoPayload['records'] : [];
     $woblinkRows = is_array($woblinkPayload['records'] ?? null) ? $woblinkPayload['records'] : [];
+    $azymutRows = is_array($azymutPayload['records'] ?? null) ? $azymutPayload['records'] : [];
     $ebookpointRows = is_array($ebookpointPayload['records'] ?? null) ? $ebookpointPayload['records'] : [];
     $nasbiRows = is_array($nasbiPayload['records'] ?? null) ? $nasbiPayload['records'] : [];
 
@@ -225,6 +229,7 @@ try {
     $legimiByIsbn = indexExternalSourceByIsbn($legimiRows);
     $nextoByIsbn = indexExternalSourceByIsbn($nextoRows);
     $woblinkByIsbn = indexExternalSourceByIsbn($woblinkRows);
+    $azymutByIsbn = indexExternalSourceByIsbn($azymutRows);
     $ebookpointByIsbn = indexExternalSourceByIsbn($ebookpointRows);
     $nasbiByIsbn = indexExternalSourceByIsbn($nasbiRows);
 
@@ -334,6 +339,10 @@ try {
         $woblinkUnits = (int)$woblink['units_sold'];
         $woblinkNet = ((int)$woblink['margin_net_cents']) / 100;
 
+        $azymut = $azymutByIsbn[$isbnNorm] ?? ['units_sold' => 0, 'margin_net_cents' => 0];
+        $azymutUnits = (int)$azymut['units_sold'];
+        $azymutNet = ((int)$azymut['margin_net_cents']) / 100;
+
         $ebookpoint = $ebookpointByIsbn[$isbnNorm] ?? ['units_sold' => 0, 'margin_net_cents' => 0];
         $ebookpointUnits = (int)$ebookpoint['units_sold'];
         $ebookpointNet = ((int)$ebookpoint['margin_net_cents']) / 100;
@@ -342,8 +351,6 @@ try {
         $nasbiUnits = (int)$nasbi['units_sold'];
         $nasbiNet = ((int)$nasbi['margin_net_cents']) / 100;
 
-        $azymutUnits = 0;
-        $azymutNet = 0.0;
         $storytelUnits = 0;
         $storytelNet = 0.0;
         $audiotekaUnits = 0;
@@ -483,6 +490,7 @@ try {
         'input_legimi_json' => $legimiJsonPath,
         'input_nexto_json' => $nextoJsonPath,
         'input_woblink_json' => $woblinkJsonPath,
+        'input_azymut_json' => $azymutJsonPath,
         'input_ebookpoint_json' => $ebookpointJsonPath,
         'input_nasbi_json' => $nasbiJsonPath,
         'output_xlsx' => $xlsxPath,
