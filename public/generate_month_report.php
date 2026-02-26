@@ -12,6 +12,7 @@ require __DIR__ . '/../bin/_legimi.php';
 require __DIR__ . '/../bin/_nexto.php';
 require __DIR__ . '/../bin/_woblink.php';
 require __DIR__ . '/../bin/_ebookpoint.php';
+require __DIR__ . '/../bin/_azymut.php';
 require __DIR__ . '/_web_common.php';
 
 try {
@@ -235,74 +236,31 @@ try {
             'label' => 'Budowa danych raportu (JSON, zero-fill)',
             'cmd' => escapeshellarg($phpCli) . ' ' . escapeshellarg($root . '/bin/build_month_rows_from_woo.php') . ' --month=' . escapeshellarg($month),
         ],
-        [
-            'label' => 'Walidacja i parsowanie raportu Virtualo',
+    ];
+
+    foreach ($requiredReports as $reportDef) {
+        $fieldName = (string)($reportDef['field_name'] ?? '');
+        $label = (string)($reportDef['label'] ?? $fieldName);
+        $ingestScript = (string)($reportDef['ingest_script'] ?? '');
+        $matchedUpload = $uploadedReportPaths[$fieldName] ?? null;
+
+        if (!is_array($matchedUpload) || $ingestScript === '') {
+            continue;
+        }
+
+        $steps[] = [
+            'label' => 'Walidacja i parsowanie: ' . $label,
             'cmd' => escapeshellarg($phpCli)
-                . ' ' . escapeshellarg($root . '/bin/ingest_virtualo_report_month.php')
+                . ' ' . escapeshellarg($root . '/bin/' . $ingestScript)
                 . ' --month=' . escapeshellarg($month)
-                . ' --input=' . escapeshellarg((string)$uploadedReportPaths['virtualo_report']['path'])
-                . ' --original-name=' . escapeshellarg((string)$uploadedReportPaths['virtualo_report']['name']),
-        ],
-        [
-            'label' => 'Walidacja i parsowanie raportu Empik',
-            'cmd' => escapeshellarg($phpCli)
-                . ' ' . escapeshellarg($root . '/bin/ingest_empik_report_month.php')
-                . ' --month=' . escapeshellarg($month)
-                . ' --input=' . escapeshellarg((string)$uploadedReportPaths['empik_report']['path'])
-                . ' --original-name=' . escapeshellarg((string)$uploadedReportPaths['empik_report']['name']),
-        ],
-        [
-            'label' => 'Walidacja i parsowanie raportu Publio',
-            'cmd' => escapeshellarg($phpCli)
-                . ' ' . escapeshellarg($root . '/bin/ingest_publio_report_month.php')
-                . ' --month=' . escapeshellarg($month)
-                . ' --input=' . escapeshellarg((string)$uploadedReportPaths['publio_report']['path'])
-                . ' --original-name=' . escapeshellarg((string)$uploadedReportPaths['publio_report']['name']),
-        ],
-        [
-            'label' => 'Walidacja i parsowanie raportu Legimi',
-            'cmd' => escapeshellarg($phpCli)
-                . ' ' . escapeshellarg($root . '/bin/ingest_legimi_report_month.php')
-                . ' --month=' . escapeshellarg($month)
-                . ' --input=' . escapeshellarg((string)$uploadedReportPaths['legimi_report']['path'])
-                . ' --original-name=' . escapeshellarg((string)$uploadedReportPaths['legimi_report']['name']),
-        ],
-        [
-            'label' => 'Walidacja i parsowanie raportu Nexto',
-            'cmd' => escapeshellarg($phpCli)
-                . ' ' . escapeshellarg($root . '/bin/ingest_nexto_report_month.php')
-                . ' --month=' . escapeshellarg($month)
-                . ' --input=' . escapeshellarg((string)$uploadedReportPaths['nexto_report']['path'])
-                . ' --original-name=' . escapeshellarg((string)$uploadedReportPaths['nexto_report']['name']),
-        ],
-        [
-            'label' => 'Walidacja i parsowanie raportu Woblink',
-            'cmd' => escapeshellarg($phpCli)
-                . ' ' . escapeshellarg($root . '/bin/ingest_woblink_report_month.php')
-                . ' --month=' . escapeshellarg($month)
-                . ' --input=' . escapeshellarg((string)$uploadedReportPaths['woblink_report']['path'])
-                . ' --original-name=' . escapeshellarg((string)$uploadedReportPaths['woblink_report']['name']),
-        ],
-        [
-            'label' => 'Walidacja i parsowanie raportu ebookpoint',
-            'cmd' => escapeshellarg($phpCli)
-                . ' ' . escapeshellarg($root . '/bin/ingest_ebookpoint_report_month.php')
-                . ' --month=' . escapeshellarg($month)
-                . ' --input=' . escapeshellarg((string)$uploadedReportPaths['ebookpoint_report']['path'])
-                . ' --original-name=' . escapeshellarg((string)$uploadedReportPaths['ebookpoint_report']['name']),
-        ],
-        [
-            'label' => 'Walidacja i parsowanie raportu nasbi',
-            'cmd' => escapeshellarg($phpCli)
-                . ' ' . escapeshellarg($root . '/bin/ingest_nasbi_report_month.php')
-                . ' --month=' . escapeshellarg($month)
-                . ' --input=' . escapeshellarg((string)$uploadedReportPaths['nasbi_report']['path'])
-                . ' --original-name=' . escapeshellarg((string)$uploadedReportPaths['nasbi_report']['name']),
-        ],
-        [
-            'label' => 'Budowa pliku XLSX',
-            'cmd' => escapeshellarg($phpCli) . ' ' . escapeshellarg($root . '/bin/export_month_report_xlsx.php') . ' --month=' . escapeshellarg($month),
-        ],
+                . ' --input=' . escapeshellarg((string)$matchedUpload['path'])
+                . ' --original-name=' . escapeshellarg((string)$matchedUpload['name']),
+        ];
+    }
+
+    $steps[] = [
+        'label' => 'Budowa pliku XLSX',
+        'cmd' => escapeshellarg($phpCli) . ' ' . escapeshellarg($root . '/bin/export_month_report_xlsx.php') . ' --month=' . escapeshellarg($month),
     ];
 
     $logs = [];

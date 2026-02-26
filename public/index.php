@@ -179,6 +179,7 @@ $requiredReports = requiredReportsDefinitions();
         'Parsowanie raportu Legimi…',
         'Parsowanie raportu Nexto…',
         'Parsowanie raportu Woblink…',
+        'Parsowanie raportu Azymut…',
         'Parsowanie raportu ebookpoint…',
         'Parsowanie raportu nasbi…',
         'Budowa raportu i przygotowanie pliku xlsx…'
@@ -206,6 +207,11 @@ $requiredReports = requiredReportsDefinitions();
           ['isbn/issn/ismn'],
           ['liczba sprzedanych egzemplarzy'],
           ['kwota dla wydawcy netto']
+        ],
+        azymut: [
+          ['isbn'],
+          ['cena po rab.'],
+          ['ilosc', 'liczba']
         ],
         ebookpoint: [
           ['id'],
@@ -346,6 +352,9 @@ $requiredReports = requiredReportsDefinitions();
         if (signatureMatches(headerSet, reportSignatures.publio)) {
           matches.push('publio');
         }
+        if (signatureMatches(headerSet, reportSignatures.azymut)) {
+          matches.push('azymut');
+        }
         if (signatureMatches(headerSet, reportSignatures.ebookpoint)) {
           matches.push('ebookpoint');
         }
@@ -359,6 +368,7 @@ $requiredReports = requiredReportsDefinitions();
             virtualo: 'Virtualo',
             empik: 'Empik',
             publio: 'Publio',
+            azymut: 'Azymut',
             ebookpoint: 'ebookpoint',
             nasbi: 'nasbi'
           };

@@ -84,6 +84,16 @@ function requiredReportsDefinitions(): array
             'is_required_for_generation' => true,
         ],
         [
+            'source_id' => 'azymut',
+            'field_name' => 'azymut_report',
+            'label' => 'Raport Azymut',
+            'allowed_extensions' => ['csv'],
+            'detector' => 'validateAndParseAzymutCsv',
+            'ingest_script' => 'ingest_azymut_report_month.php',
+            'is_supported' => true,
+            'is_required_for_generation' => false,
+        ],
+        [
             'source_id' => 'ebookpoint',
             'field_name' => 'ebookpoint_report',
             'label' => 'Raport sprzedaży ebookpoint',
